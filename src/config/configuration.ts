@@ -42,6 +42,7 @@ export default () => ({
     apiKey: process.env.OPENAI_API_KEY,
     embeddingModel:
       process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-ada-002',
+    chatModel: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
   },
   eventQueue: {
     redisUrl:

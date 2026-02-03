@@ -23,6 +23,7 @@ import { SeederModule } from '@core/database/seeder/seeder.module';
 import { EventsModule } from './core/events/events.module';
 import { QueueModule } from './core/queue/queue.module';
 import { AnalysisModule } from './api/analysis/analysis.module';
+import { AgentsModule } from './core/agents/agents.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AnalysisModule } from './api/analysis/analysis.module';
     RagModule,
     PitchDeckModule,
     AnalysisModule,
+    AgentsModule,
     ConfigModule.forRoot({
       isGlobal: true,
       cache: false,
