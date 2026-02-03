@@ -7,9 +7,10 @@ import { ConfigService } from '@nestjs/config';
 
 import * as dotenv from 'dotenv';
 
+// Load environment variables BEFORE importing modules
+dotenv.config({ override: true });
+
 async function bootstrap() {
-  // Reload environment variables
-  dotenv.config({ override: true });
   const app = await NestFactory.create(AppModule);
   /**
    * define cors options then pass to options to function enableCors.
