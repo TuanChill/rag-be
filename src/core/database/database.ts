@@ -22,7 +22,7 @@ export class DatabaseConfig implements MikroOrmOptionsFactory {
       cache: { enabled: false },
       loadStrategy: LoadStrategy.JOINED,
       debug: nodeEnv !== 'production',
-      entities: ['dist/api/**/entities/*.entity.js'],
+      entities: ['dist/src/api/**/entities/*.entity.js'],
       entitiesTs: ['src/api/**/entities/*.entity.ts'],
       // Enable automatic loading of entities on dev, remove on production
       autoloadEntities: true,
