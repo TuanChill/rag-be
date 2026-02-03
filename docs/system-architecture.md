@@ -670,6 +670,111 @@ this.logger.error('Failed to ingest documents', error);
 - Memory usage tracking
 - Error rate metrics
 
+## API Documentation
+
+### RAG Module Endpoints
+
+The RAG module provides four RESTful endpoints for document ingestion, querying, and management:
+
+#### 1. POST /rag/ingest - Ingest Documents
+**Purpose**: Upload documents to the vector store for retrieval-augmented generation.
+
+**Request Body**:
+```typescript
+{
+  documents: DocumentDto[]
+}
+```
+
+**Authentication**: Optional (JWT not required for ingestion)
+
+**Response** (201 Created):
+```typescript
+{
+  success: boolean;
+  documentIds: string[];
+  count: number;
+}
+```
+
+**Swagger Documentation**: Comprehensive endpoint documentation with request/response examples.
+
+#### 2. POST /rag/query - Query Documents
+**Purpose**: Search for similar documents using semantic similarity.
+
+**Request Body**:
+```typescript
+{
+  query: string;
+  topK?: number;        // Default: 5
+  filter?: DocumentFilterDto;
+  scoreThreshold?: number; // Optional similarity score filter (0-1)
+}
+```
+
+**Authentication**: Optional (JWT not required for querying)
+
+**Response** (200 OK):
+```typescript
+QueryResult[]
+```
+
+**Swagger Documentation**: Detailed parameter validation and response schema documentation.
+
+#### 3. DELETE /rag/documents - Delete Documents
+**Purpose**: Remove documents by IDs or apply filter-based deletion.
+
+**Request Body**:
+```typescript
+{
+  ids?: string[];      // Specific document IDs to delete
+  filter?: DocumentFilterDto; // Filter criteria for deletion
+}
+```
+
+**Authentication**: Optional (JWT not required for deletion)
+
+**Response** (200 OK):
+```typescript
+{
+  success: boolean;
+  deletedCount: number;
+}
+```
+
+**Swagger Documentation**: Clear examples of both ID-based and filter-based deletion patterns.
+
+#### 4. GET /rag/health - Health Check
+**Purpose**: Verify RAG service availability and vector store connection.
+
+**Authentication**: None required
+
+**Response** (200 OK):
+```typescript
+{
+  status: 'healthy' | 'unhealthy';
+  collection: string;
+  timestamp: string;
+}
+```
+
+**Swagger Documentation**: Standard health check response with status indicators.
+
+### Authentication Strategy
+**Design Decision**: All RAG endpoints are intentionally public (no JWT required) for maximum flexibility in RAG implementations. Authentication can be implemented at the API gateway level if needed.
+
+### Swagger Integration
+- **@ApiTags('rag')**: Groups all RAG endpoints under 'rag' tag
+- **@ApiOperation**: Provides clear endpoint descriptions
+- **@ApiResponse**: Documented response codes and example payloads
+- **Global Exception Handling**: HttpExceptionFilter ensures consistent error responses
+
+### Error Handling Patterns
+- Validation errors throw 400 Bad Request
+- Vector store errors throw 500 Internal Server Error
+- Invalid operations throw 422 Unprocessable Entity
+- All errors include structured error messages in response body
+
 ## Unresolved Architecture Questions
 
 1. **Multi-Tenancy**: How to isolate data per organization?
