@@ -25,6 +25,7 @@ import { QueueModule } from './core/queue/queue.module';
 import { AnalysisModule } from './api/analysis/analysis.module';
 import { AgentsModule } from './core/agents/agents.module';
 import { ScoringModule } from './agents/scoring/scoring.module';
+import { AnalysisModule as AnalysisAgentsModule } from './agents/analysis/analysis.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ScoringModule } from './agents/scoring/scoring.module';
     AnalysisModule,
     AgentsModule,
     ScoringModule,
+    AnalysisAgentsModule,
     ConfigModule.forRoot({
       isGlobal: true,
       cache: false,
