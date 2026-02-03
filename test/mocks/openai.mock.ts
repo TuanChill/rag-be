@@ -48,7 +48,10 @@ export const mockOpenAIResponse = (prompt: string) => {
           description: 'Deep AI expertise with proven track record',
           severity: 'major',
           recommendations: ['Highlight team background in early slides'],
-          evidence: { quote: 'Founders with 10+ years experience', slideNumber: 2 },
+          evidence: {
+            quote: 'Founders with 10+ years experience',
+            slideNumber: 2,
+          },
         },
       ],
       summary: 'Key strength: Experienced team with relevant expertise',

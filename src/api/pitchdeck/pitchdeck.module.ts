@@ -5,9 +5,10 @@ import { PitchDeckController } from './pitchdeck.controller';
 import { PitchDeck } from './entities/pitch-deck.entity';
 import { DeckChunk } from './entities/deck-chunk.entity';
 import { JwtMiddleware } from '@core/middlewares/jwt.middleware';
+import { UserModule } from '@api/user/user.module';
 
 @Module({
-  imports: [MikroOrmModule.forFeature([PitchDeck, DeckChunk])],
+  imports: [MikroOrmModule.forFeature([PitchDeck, DeckChunk]), UserModule],
   controllers: [PitchDeckController],
   providers: [PitchDeckService],
   exports: [PitchDeckService],

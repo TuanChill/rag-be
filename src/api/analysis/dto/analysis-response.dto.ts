@@ -128,3 +128,114 @@ export class AnalysisResponseDto {
     };
   }
 }
+
+/**
+ * Phase 9: Category Finding DTO for UI-compatible response
+ */
+export class CategoryFindingDto {
+  @ApiProperty({ description: 'Finding title (5-10 words)' })
+  title!: string;
+
+  @ApiProperty({ description: 'Detailed description (2-3 sentences)' })
+  description!: string;
+
+  @ApiProperty({
+    description: 'Impact type',
+    enum: ['positive', 'negative', 'neutral'],
+  })
+  impact!: 'positive' | 'negative' | 'neutral';
+
+  @ApiProperty({
+    description: 'Severity level',
+    enum: ['critical', 'major', 'minor'],
+  })
+  severity!: 'critical' | 'major' | 'minor';
+
+  @ApiProperty({ description: 'Actionable recommendations', required: false })
+  recommendations?: string[];
+
+  @ApiProperty({ description: 'Supporting evidence', required: false })
+  evidence?: {
+    quote?: string;
+    slideNumber?: number;
+  };
+}
+
+/**
+ * Phase 9: Category Analysis Response for UI
+ */
+export class CategoryAnalysisResponse {
+  @ApiProperty({ description: 'Category score (0-100)' })
+  score!: number;
+
+  @ApiProperty({ description: '2-3 sentence summary' })
+  summary!: string;
+
+  @ApiProperty({ description: 'Category findings', type: [CategoryFindingDto] })
+  findings!: CategoryFindingDto[];
+
+  @ApiProperty({
+    description: 'UI state hint - expanded by default',
+    required: false,
+  })
+  isExpanded?: boolean;
+}
+
+/**
+ * Phase 9: UI-Compatible Analysis Response with categories
+ */
+export class AnalysisResponseUiDto {
+  @ApiProperty({ description: 'Analysis UUID' })
+  uuid!: string;
+
+  @ApiProperty({ description: 'Pitch deck ID' })
+  deckId!: string;
+
+  @ApiProperty({ description: 'Analysis status' })
+  status!: AnalysisStatus;
+
+  @ApiProperty({ description: 'Overall score (0-100)' })
+  overallScore!: number;
+
+  @ApiProperty({
+    description: 'Overall assessment',
+    type: CategoryAnalysisResponse,
+  })
+  overallAssessment!: CategoryAnalysisResponse;
+
+  @ApiProperty({
+    description: 'Market opportunity',
+    type: CategoryAnalysisResponse,
+  })
+  marketOpportunity!: CategoryAnalysisResponse;
+
+  @ApiProperty({
+    description: 'Business model',
+    type: CategoryAnalysisResponse,
+  })
+  businessModel!: CategoryAnalysisResponse;
+
+  @ApiProperty({
+    description: 'Team & execution',
+    type: CategoryAnalysisResponse,
+  })
+  teamExecution!: CategoryAnalysisResponse;
+
+  @ApiProperty({
+    description: 'Financial projections',
+    type: CategoryAnalysisResponse,
+  })
+  financialProjections!: CategoryAnalysisResponse;
+
+  @ApiProperty({
+    description: 'Competitive landscape',
+    type: CategoryAnalysisResponse,
+  })
+  competitiveLandscape!: CategoryAnalysisResponse;
+
+  @ApiProperty({ description: 'Creation timestamp' })
+  createdAt!: Date;
+
+  @ApiProperty({ description: 'Completion timestamp', required: false })
+  completedAt?: Date;
+}

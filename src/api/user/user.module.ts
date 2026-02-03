@@ -11,7 +11,7 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
   imports: [MikroOrmModule.forFeature([User])],
   controllers: [UserController],
   providers: [UserService, JwtService, JwtStrategy],
-  exports: [UserService],
+  exports: [UserService, JwtService, JwtStrategy],
 })
 export class UserModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

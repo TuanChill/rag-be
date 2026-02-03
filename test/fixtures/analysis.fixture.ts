@@ -44,7 +44,8 @@ export const mockStrengthFinding = {
 export const mockWeaknessFinding = {
   type: 'weakness' as const,
   title: 'Limited competitive differentiation',
-  description: 'Value proposition needs clearer differentiation from existing solutions.',
+  description:
+    'Value proposition needs clearer differentiation from existing solutions.',
   severity: 'minor' as const,
   source: 'WeaknessesAgent',
 };

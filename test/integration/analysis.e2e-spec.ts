@@ -77,9 +77,7 @@ describe('Analysis E2E', () => {
     });
 
     it('should prevent unauthorized access', async () => {
-      await request(app.getHttpServer())
-        .get('/analysis/test-uuid')
-        .expect(401);
+      await request(app.getHttpServer()).get('/analysis/test-uuid').expect(401);
     });
 
     it('should require auth for start analysis', async () => {
