@@ -24,6 +24,7 @@ import { EventsModule } from './core/events/events.module';
 import { QueueModule } from './core/queue/queue.module';
 import { AnalysisModule } from './api/analysis/analysis.module';
 import { AgentsModule } from './core/agents/agents.module';
+import { ScoringModule } from './agents/scoring/scoring.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AgentsModule } from './core/agents/agents.module';
     PitchDeckModule,
     AnalysisModule,
     AgentsModule,
+    ScoringModule,
     ConfigModule.forRoot({
       isGlobal: true,
       cache: false,
