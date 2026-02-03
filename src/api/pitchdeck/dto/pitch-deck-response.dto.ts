@@ -1,5 +1,7 @@
 import { PitchDeck, DeckStatus } from '../entities/pitch-deck.entity';
+import { PitchDeckFileResponseDto } from './pitch-deck-file-response.dto';
 import { ApiProperty } from '@nestjs/swagger';
+import { PitchDeckFile } from '../entities/pitch-deck-file.entity';
 
 export class PitchDeckResponseDto {
   @ApiProperty()
@@ -14,27 +16,23 @@ export class PitchDeckResponseDto {
   @ApiProperty({ required: false })
   description?: string;
 
-  // TODO: Phase 02 - Replace with files array
-  @ApiProperty({ required: false })
-  originalFileName?: string;
-
-  @ApiProperty({ required: false })
-  mimeType?: string;
-
-  @ApiProperty({ required: false })
-  fileSize?: number;
-
   @ApiProperty()
   status!: DeckStatus;
 
   @ApiProperty()
   chunkCount!: number;
 
+  @ApiProperty()
+  fileCount!: number;
+
   @ApiProperty({ required: false })
   errorMessage?: string;
 
   @ApiProperty({ required: false, type: [String] })
   tags?: string[];
+
+  @ApiProperty({ type: [PitchDeckFileResponseDto] })
+  files!: PitchDeckFileResponseDto[];
 
   @ApiProperty()
   createdAt!: Date;
@@ -45,20 +43,21 @@ export class PitchDeckResponseDto {
   @ApiProperty()
   lastAccessedAt!: Date;
 
-  static fromEntity(entity: PitchDeck): PitchDeckResponseDto {
+  static fromEntity(entity: PitchDeck, files?: PitchDeckFile[]): PitchDeckResponseDto {
+    if (!entity) {
+      throw new Error('Entity is required');
+    }
     return {
-      id: entity.id,
+      id: entity._id.toString(),
       uuid: entity.uuid,
       title: entity.title,
       description: entity.description,
-      // TODO: Phase 02 - Populate from files array
-      originalFileName: undefined,
-      mimeType: undefined,
-      fileSize: undefined,
       status: entity.status,
       chunkCount: entity.chunkCount,
+      fileCount: entity.fileCount,
       errorMessage: entity.errorMessage,
       tags: entity.tags,
+      files: files?.map((f) => PitchDeckFileResponseDto.fromEntity(f)) || [],
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
       lastAccessedAt: entity.lastAccessedAt,

@@ -1,16 +1,20 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository, Reference, wrap } from '@mikro-orm/core';
 import { ObjectId } from '@mikro-orm/mongodb';
 import { BaseService } from '@core/base/base.service';
 import { PitchDeck, DeckStatus } from './entities/pitch-deck.entity';
 import { DeckChunk } from './entities/deck-chunk.entity';
+import { PitchDeckFile, FileStatus } from './entities/pitch-deck-file.entity';
 import { UploadDeckDto } from './dto/upload-deck.dto';
 import { User } from '../user/entities/user.entity';
-import { MIME_TO_EXT } from './constants/file-types';
+import { MIME_TO_EXT, MimeType } from './constants/file-types';
 import { v4 as uuidv4 } from 'uuid';
 import { promises as fs } from 'fs';
-import { join, extname } from 'path';
+import { join } from 'path';
+
+const MAX_FILES_PER_DECK = 10;
+const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 500MB total
 
 @Injectable()
 export class PitchDeckService extends BaseService<PitchDeck> {
@@ -35,74 +39,105 @@ export class PitchDeckService extends BaseService<PitchDeck> {
     }
   }
 
+  private async getDeckUploadDir(deckUuid: string): Promise<string> {
+    const dir = join(this.uploadDir, deckUuid);
+    await fs.mkdir(dir, { recursive: true });
+    return dir;
+  }
+
   /**
-   * Upload and store pitch deck file
-   * Phase 1: Storage only - file persistence without processing
+   * Upload and store pitch deck files (multi-file support)
+   * Phase 03: Multiple files per deck with transaction safety
    */
   async uploadDeck(
-    file: Express.Multer.File,
+    files: Express.Multer.File[],
     dto: UploadDeckDto,
     ownerId: string,
   ): Promise<PitchDeck> {
-    // Use file from disk storage (controller saves to temp first)
-    const tempPath = file.path;
-    if (!tempPath) {
-      throw new Error('File path not provided by multer');
+    // Validation
+    if (files.length === 0) {
+      throw new BadRequestException('No files provided');
+    }
+    if (files.length > MAX_FILES_PER_DECK) {
+      throw new BadRequestException(
+        `Maximum ${MAX_FILES_PER_DECK} files allowed per deck`,
+      );
     }
 
-    // Generate safe storage path with validated extension
-    const uuid = uuidv4();
-    const safeExtension = MIME_TO_EXT[file.mimetype] || 'bin';
-    const storageFileName = `${uuid}.${safeExtension}`;
-    const storagePath = join(this.uploadDir, storageFileName);
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    if (totalSize > MAX_TOTAL_SIZE) {
+      throw new BadRequestException('Total size exceeds 500MB limit');
+    }
 
-    let pitchDeck: PitchDeck | null = null;
+    // Validate each file has a valid MIME type
+    for (const file of files) {
+      if (!MIME_TO_EXT[file.mimetype as MimeType]) {
+        throw new BadRequestException(
+          `Invalid file type: ${file.mimetype}. Allowed: PDF, PPT, PPTX, DOC, DOCX`,
+        );
+      }
+    }
+
+    const deckUuid = uuidv4();
+    const deckDir = await this.getDeckUploadDir(deckUuid);
+
+    const pitchDeck = this.pitchDeckRepository.create({
+      uuid: deckUuid,
+      title: dto.title,
+      description: dto.description,
+      status: 'uploading' as DeckStatus,
+      chunkCount: 0,
+      astraCollection: 'pitch_decks',
+      owner: Reference.createFromPK(User, new ObjectId(ownerId)),
+      tags: dto.tags,
+      fileCount: files.length,
+      lastAccessedAt: new Date(),
+    });
 
     try {
       this.logger.log(
-        `Uploading pitch deck: ${dto.title} for user: ${ownerId}`,
+        `Uploading pitch deck: ${dto.title} with ${files.length} files for user: ${ownerId}`,
       );
 
-      // Move file from temp to final location
-      await fs.rename(tempPath, storagePath);
+      // Process each file
+      for (const file of files) {
+        const fileUuid = uuidv4();
+        const safeExtension = MIME_TO_EXT[file.mimetype as MimeType] || 'bin';
+        const storageFileName = `${fileUuid}.${safeExtension}`;
+        const storagePath = join(deckDir, storageFileName);
 
-      // Create PitchDeck entity with user reference
-      // TODO: Phase 03 - Refactor for multi-file upload (create PitchDeckFile entities)
-      pitchDeck = this.pitchDeckRepository.create({
-        uuid,
-        title: dto.title,
-        description: dto.description,
-        status: 'uploading' as DeckStatus,
-        chunkCount: 0,
-        astraCollection: 'pitch_decks',
-        owner: Reference.createFromPK(User, new ObjectId(ownerId)),
-        tags: dto.tags,
-        fileCount: 1, // TODO: Phase 03 - Calculate from files array
-        lastAccessedAt: new Date(),
-      });
+        // Move from temp to deck directory
+        await fs.rename(file.path, storagePath);
 
+        const deckFile = this.em.create(PitchDeckFile, {
+          uuid: fileUuid,
+          originalFileName: file.originalname,
+          mimeType: file.mimetype as MimeType,
+          fileSize: file.size,
+          storagePath,
+          status: 'ready' as FileStatus,
+          deck: pitchDeck,
+        });
+
+        pitchDeck.files.add(deckFile);
+      }
+
+      pitchDeck.status = 'ready' as DeckStatus;
       await this.em.persist(pitchDeck).flush();
 
-      this.logger.log(`Pitch deck uploaded successfully: ${uuid}`);
+      this.logger.log(
+        `Pitch deck uploaded successfully: ${deckUuid} with ${files.length} files`,
+      );
 
       return pitchDeck;
     } catch (error) {
       this.logger.error('Failed to upload pitch deck', error);
 
-      // Cleanup: remove moved file if database operation failed
-      if (pitchDeck) {
-        try {
-          await fs.unlink(storagePath);
-        } catch (unlinkError) {
-          this.logger.warn('Failed to cleanup file after error', unlinkError);
-        }
-      } else {
-        // Restore temp file if move failed
-        try {
-          await fs.rename(tempPath, storagePath);
-        } catch (restoreError) {
-          this.logger.warn('Failed to restore temp file', restoreError);
-        }
+      // Cleanup: remove deck directory
+      try {
+        await fs.rm(deckDir, { recursive: true, force: true });
+      } catch (cleanupError) {
+        this.logger.warn('Failed to cleanup deck directory', cleanupError);
       }
 
       throw error;
@@ -115,7 +150,7 @@ export class PitchDeckService extends BaseService<PitchDeck> {
   async findByUuid(uuid: string, ownerId: string): Promise<PitchDeck | null> {
     return await this.pitchDeckRepository.findOne(
       { uuid, owner: new ObjectId(ownerId) },
-      { populate: ['chunks'] },
+      { populate: ['chunks', 'files'] },
     );
   }
 
@@ -140,6 +175,7 @@ export class PitchDeckService extends BaseService<PitchDeck> {
 
   /**
    * Delete pitch deck with ownership validation
+   * Phase 03: Deletes deck directory containing all files
    */
   async deleteDeck(uuid: string, ownerId: string): Promise<void> {
     const deck = await this.findByUuid(uuid, ownerId);
@@ -149,22 +185,19 @@ export class PitchDeckService extends BaseService<PitchDeck> {
 
     this.logger.log(`Deleting pitch deck: ${uuid}`);
 
-    // Delete file from disk
-    // TODO: Phase 03 - Delete all files in deck.files collection
+    // Delete entire deck directory from disk
+    const deckDir = join(this.uploadDir, uuid);
     try {
-      // const files = await deck.files.loadItems();
-      // for (const file of files) {
-      //   await fs.unlink(file.storagePath);
-      // }
-      this.logger.warn('File deletion not implemented until Phase 03');
+      await fs.rm(deckDir, { recursive: true, force: true });
+      this.logger.log(`Deleted deck directory: ${deckDir}`);
     } catch (error) {
-      this.logger.warn('Failed to delete files', error);
+      this.logger.warn(`Failed to delete deck directory: ${deckDir}`, error);
     }
 
-    // Delete chunks
+    // Delete chunks from database
     await this.deckChunkRepository.nativeDelete({ deck: deck._id });
 
-    // Delete entity (cascade will delete PitchDeckFile entities)
+    // Delete entity (cascade will delete PitchDeckFile entities from database)
     await this.em.remove(deck).flush();
 
     this.logger.log(`Pitch deck deleted: ${uuid}`);

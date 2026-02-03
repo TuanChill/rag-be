@@ -7,14 +7,15 @@ import {
   Body,
   Request,
   UseInterceptors,
-  UploadedFile,
+  UploadedFiles,
   BadRequestException,
   Query,
   ParseFilePipeBuilder,
   HttpStatus,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -26,34 +27,16 @@ import { PitchDeckService } from './pitchdeck.service';
 import { UploadDeckDto } from './dto/upload-deck.dto';
 import { PitchDeckResponseDto } from './dto/pitch-deck-response.dto';
 import { diskStorage } from 'multer';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { promises as fs } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { fileTypeFromBuffer } from 'file-type';
 import { JwtAuthGuard } from '../../core/guard/jwt.auth.guard';
-
-const ALLOWED_MIMES = new Set([
-  'application/pdf',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-]);
-
-// Map MIME types to safe file extensions (prevents path traversal)
-const MIME_TO_EXT: Record<string, string> = {
-  'application/pdf': 'pdf',
-  'application/vnd.ms-powerpoint': 'ppt',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation':
-    'pptx',
-  'application/msword': 'doc',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-    'docx',
-};
+import { ALLOWED_MIMES, MIME_TO_EXT } from './constants/file-types';
 
 const TEMP_UPLOAD_DIR = join(process.cwd(), 'uploads', 'temp');
 
-// Ensure temp directory exists
+// Ensure temp directory exists (async, best effort)
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 fs.mkdir(TEMP_UPLOAD_DIR, { recursive: true }).catch(() => {});
 
@@ -62,10 +45,12 @@ fs.mkdir(TEMP_UPLOAD_DIR, { recursive: true }).catch(() => {});
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class PitchDeckController {
+  private readonly logger = new Logger(PitchDeckController.name);
+
   constructor(private readonly pitchDeckService: PitchDeckService) {}
 
   @Post('upload')
-  @ApiOperation({ summary: 'Upload a pitch deck file' })
+  @ApiOperation({ summary: 'Upload a pitch deck with multiple files' })
   @ApiConsumes('multipart/form-data')
   @ApiResponse({
     status: 201,
@@ -75,20 +60,20 @@ export class PitchDeckController {
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseInterceptors(
-    FileInterceptor('deck', {
+    FilesInterceptor('files', 10, {
       storage: diskStorage({
         destination: TEMP_UPLOAD_DIR,
         filename: (_req, file, cb) => {
           const uuid = uuidv4();
-          const ext = MIME_TO_EXT[file.mimetype] || 'bin';
+          const ext = MIME_TO_EXT[file.mimetype as any] || 'bin';
           cb(null, `${uuid}.${ext}`);
         },
       }),
-      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB per file
     }),
   )
   async uploadDeck(
-    @UploadedFile(
+    @UploadedFiles(
       new ParseFilePipeBuilder()
         .addMaxSizeValidator({ maxSize: 50 * 1024 * 1024 })
         .build({
@@ -97,45 +82,52 @@ export class PitchDeckController {
             new BadRequestException('File size exceeds 50MB limit'),
         }),
     )
-    file: Express.Multer.File,
+    files: Express.Multer.File[],
     @Body() dto: UploadDeckDto,
     @Request() req: { user: { sub: string } },
   ): Promise<PitchDeckResponseDto> {
-    if (!file) {
-      throw new BadRequestException('No file provided');
+    if (!files || files.length === 0) {
+      throw new BadRequestException('No files provided');
     }
 
-    // Validate MIME type against whitelist
-    if (!ALLOWED_MIMES.has(file.mimetype)) {
-      // Cleanup temp file on validation failure
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
-      fs.unlink(file.path).catch(() => {});
-      throw new BadRequestException(
-        `Invalid file type. Allowed types: PDF, PPT, PPTX, DOC, DOCX`,
-      );
-    }
+    // Validate each file
+    for (const file of files) {
+      // Validate MIME type against whitelist
+      if (!ALLOWED_MIMES.includes(file.mimetype as any)) {
+        // Cleanup all temp files on validation failure (await to avoid race condition)
+        await Promise.allSettled(
+          files.map((f) => fs.unlink(f.path)),
+        );
+        this.logger.warn(`Cleaned up ${files.length} temp files after MIME validation failure`);
+        throw new BadRequestException(
+          `Invalid file type: ${basename(file.originalname)}. Allowed: PDF, PPT, PPTX, DOC, DOCX`,
+        );
+      }
 
-    // Validate magic number (actual file content)
-    const fileBuffer = await fs.readFile(file.path);
-    const fileType = await fileTypeFromBuffer(fileBuffer);
+      // Validate magic number (actual file content)
+      const fileBuffer = await fs.readFile(file.path);
+      const fileType = await fileTypeFromBuffer(fileBuffer);
 
-    if (!fileType || !ALLOWED_MIMES.has(fileType.mime)) {
-      // Cleanup temp file on validation failure
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
-      fs.unlink(file.path).catch(() => {});
-      throw new BadRequestException(
-        'File content does not match expected format',
-      );
+      if (!fileType || !ALLOWED_MIMES.includes(fileType.mime as any)) {
+        // Cleanup all temp files on validation failure (await to avoid race condition)
+        await Promise.allSettled(
+          files.map((f) => fs.unlink(f.path)),
+        );
+        this.logger.warn(`Cleaned up ${files.length} temp files after magic number validation failure`);
+        throw new BadRequestException(
+          `File content mismatch: ${basename(file.originalname)}`,
+        );
+      }
     }
 
     const ownerId = req.user.sub;
     const pitchDeck = await this.pitchDeckService.uploadDeck(
-      file,
+      files,
       dto,
       ownerId,
     );
 
-    return PitchDeckResponseDto.fromEntity(pitchDeck);
+    return PitchDeckResponseDto.fromEntity(pitchDeck, await pitchDeck.files.loadItems());
   }
 
   @Get()
@@ -159,7 +151,9 @@ export class PitchDeckController {
       offset: offset ? Number(offset) : undefined,
     });
 
-    return decks.map((deck) => PitchDeckResponseDto.fromEntity(deck));
+    return decks.map((deck) =>
+      PitchDeckResponseDto.fromEntity(deck, deck.files.getItems()),
+    );
   }
 
   @Get(':uuid')
@@ -183,7 +177,7 @@ export class PitchDeckController {
       throw new BadRequestException('Pitch deck not found');
     }
 
-    return PitchDeckResponseDto.fromEntity(deck);
+    return PitchDeckResponseDto.fromEntity(deck, deck.files.getItems());
   }
 
   @Delete(':uuid')
