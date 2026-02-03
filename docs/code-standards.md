@@ -638,6 +638,305 @@ import { UserEntity } from '@api/user/entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 ```
 
+## Event & Queue System Standards
+
+### Event Naming Conventions
+```typescript
+// ✅ Good: Hierarchical and descriptive
+export const PITCHDECK_EVENTS = {
+  UPLOADED: 'pitchdeck.uploaded',
+  PROCESSING: 'pitchdeck.processing',
+  READY: 'pitchdeck.ready',
+  ERROR: 'pitchdeck.error',
+  ANALYSIS_STARTED: 'pitchdeck.analysis.started',
+  ANALYSIS_PROGRESS: 'pitchdeck.analysis.progress',
+  ANALYSIS_COMPLETED: 'pitchdeck.analysis.completed',
+} as const;
+
+// ❌ Bad: Flat and ambiguous
+export const EVENTS = {
+  UPLOAD: 'upload',
+  PROCESS: 'process',
+  DONE: 'done',
+};
+```
+
+### Event Service Standards
+```typescript
+@Injectable()
+export class EventsService {
+  constructor(private readonly eventEmitter: EventEmitter2) {}
+
+  // ✅ Good: Type-safe event emission
+  emitPitchDeckUploaded(payload: PitchDeckUploadedPayload): void {
+    this.eventEmitter.emit(PITCHDECK_EVENTS.UPLOADED, payload);
+    this.logger.log(`Pitch deck uploaded: ${payload.deckId}`);
+  }
+
+  // ✅ Good: Progress tracking with events
+  emitAnalysisProgress(payload: AnalysisProgressPayload): void {
+    this.eventEmitter.emit(PITCHDECK_EVENTS.ANALYSIS_PROGRESS, payload);
+    this.logger.log(`Analysis progress: ${payload.progress}% for ${payload.deckId}`);
+  }
+}
+```
+
+### Queue Job Standards
+```typescript
+// ✅ Good: Comprehensive job interface
+export interface AnalysisJobData {
+  readonly deckId: string;
+  readonly ownerId: string;
+  readonly type:
+    | 'full'
+    | 'sector'
+    | 'stage'
+    | 'thesis'
+    | 'strengths'
+    | 'weaknesses'
+    | 'competitive';
+  readonly priority?: number;
+}
+
+// ✅ Good: Progress tracking
+export interface JobProgress {
+  current: number;
+  total: number;
+  step: string;
+  message?: string;
+  percent?: number;
+}
+```
+
+### Queue Consumer Standards
+```typescript
+@Processor('analysis')
+export class AnalysisQueueConsumer {
+  @OnQueueActive()
+  onActive(job: Job<AnalysisJobData>) {
+    this.logger.log(`Job ${job.id} started for deck: ${job.data.deckId}`);
+  }
+
+  @Process('analyze-deck')
+  async handleAnalysis(job: Job<AnalysisJobData>): Promise<unknown> {
+    try {
+      await job.updateProgress(0);
+
+      // Phase 6: Will inject actual agent orchestration
+      await this.simulateAgentExecution(job);
+
+      await job.updateProgress(100);
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Job failed: ${job.id}`, error);
+      throw error; // BullMQ will handle retry
+    }
+  }
+}
+```
+
+## Module Structure (Updated)
+
+### Core Infrastructure (NEW)
+```
+src/core/
+├── events/                    # Event System
+│   ├── constants/
+│   │   └── events.constant.ts # Event names and payloads
+│   ├── events.module.ts        # EventEmitter2 module
+│   └── events.service.ts       # Type-safe event emission
+├── queue/                     # Queue System
+│   ├── interfaces/
+│   │   └── queue-job.interface.ts # Job data structures
+│   ├── queue.module.ts         # BullMQ queue configuration
+│   ├── producers/
+│   │   └── analysis-queue.producer.ts # Job creation/tracking
+│   └── consumers/
+│       └── analysis-queue.consumer.ts # Job processing
+└── base/                      # Existing base classes
+```
+
+### Module Integration
+```typescript
+// ✅ Good: Import event and queue modules
+@Module({
+  imports: [
+    EventsModule,      // Event system
+    QueueModule,       // Queue system
+    // Other modules...
+  ],
+})
+export class AppModule {}
+```
+
+### Event Flow Standards
+```typescript
+// ✅ Good: Event-driven workflow
+async uploadPitchDeck(file: File, user: User): Promise<string> {
+  const deckId = await this.createDeck(file, user);
+
+  // Emit upload event
+  this.eventsService.emitPitchDeckUploaded({
+    deckId,
+    ownerId: user.id,
+    uuid: file.uuid,
+    title: file.name,
+  });
+
+  // Trigger analysis job
+  const jobId = await this.queueProducer.addAnalysisJob({
+    deckId,
+    ownerId: user.id,
+    type: 'full',
+  });
+
+  return deckId;
+}
+```
+
+## Configuration Standards (Updated)
+
+### Queue Configuration
+```typescript
+// config/configuration.ts
+export default () => ({
+  // Existing config...
+
+  // Event Queue Configuration (NEW)
+  eventQueue: {
+    redisUrl:
+      process.env.EVENT_QUEUE_REDIS_URL ||
+      process.env.REDIS_URL ||
+      'redis://localhost:6379',
+    redisPort: parseInt(process.env.EVENT_QUEUE_REDIS_PORT) || undefined,
+    redisUser: process.env.EVENT_QUEUE_REDIS_USER,
+    redisPassword: process.env.EVENT_QUEUE_REDIS_PASSWORD,
+    redisDb: parseInt(process.env.EVENT_QUEUE_REDIS_DB) || undefined,
+    concurrency: parseInt(process.env.EVENT_QUEUE_CONCURRENCY) || 5,
+  },
+});
+```
+
+### Queue Module Configuration
+```typescript
+@Module({
+  imports: [
+    BullModule.registerQueueAsync({
+      name: 'analysis',
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('eventQueue.redisUrl'),
+          port: config.get<number>('eventQueue.redisPort'),
+          username: config.get<string>('eventQueue.redisUser'),
+          password: config.get<string>('eventQueue.redisPassword'),
+          db: config.get<number>('eventQueue.redisDb'),
+        },
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          removeOnComplete: 100,
+          removeOnFail: 50,
+          timeout: 300000, // 5 minutes
+        },
+      }),
+    }),
+  ],
+})
+export class QueueModule {}
+```
+
+## Testing Standards (Updated)
+
+### Event System Testing
+```typescript
+describe('EventsService', () => {
+  let eventsService: EventsService;
+  let eventEmitter: EventEmitter2;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EventsService,
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
+        },
+      ],
+    }).compile();
+
+    eventsService = module.get<EventsService>(EventsService);
+    eventEmitter = module.get<EventEmitter2>(EventEmitter2);
+  });
+
+  it('should emit pitch deck uploaded event', () => {
+    const payload: PitchDeckUploadedPayload = {
+      deckId: 'deck123',
+      ownerId: 'user456',
+      uuid: 'uuid789',
+      title: 'Test Deck',
+    };
+
+    eventsService.emitPitchDeckUploaded(payload);
+
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      PITCHDECK_EVENTS.UPLOADED,
+      payload
+    );
+  });
+});
+```
+
+### Queue System Testing
+```typescript
+describe('AnalysisQueueConsumer', () => {
+  let consumer: AnalysisQueueConsumer;
+  let analysisQueue: Queue;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AnalysisQueueConsumer,
+        {
+          provide: 'Queue',
+          useFactory: () => ({
+            add: jest.fn(),
+            getJob: jest.fn(),
+          }),
+        },
+      ],
+    }).compile();
+
+    consumer = module.get<AnalysisQueueConsumer>(AnalysisQueueConsumer);
+    analysisQueue = module.get<Queue>('Queue');
+  });
+
+  it('should process analysis job with progress updates', async () => {
+    const jobData: AnalysisJobData = {
+      deckId: 'deck123',
+      ownerId: 'user456',
+      type: 'full',
+    };
+
+    await consumer.handleAnalysis({
+      id: 'job123',
+      data: jobData,
+      updateProgress: jest.fn(),
+    } as Job<AnalysisJobData>);
+
+    expect(analysisQueue.add).toHaveBeenCalledWith(
+      'analyze-deck',
+      jobData,
+      expect.any(Object)
+    );
+  });
+});
+```
+
 ## Unresolved Questions
 
 1. Should we enforce absolute imports only (via ESLint rule)?
@@ -645,3 +944,6 @@ import { CreateUserDto } from './dto/create-user.dto';
 3. Should private methods use `_` prefix or rely on TypeScript `private` keyword?
 4. Do we need a linter rule to enforce BaseService usage?
 5. What is the branching strategy for feature development?
+6. How should we handle event persistence and replay?
+7. Should we implement a dead-letter queue for failed jobs?
+8. What monitoring should we add for queue performance?

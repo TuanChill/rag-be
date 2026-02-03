@@ -22,6 +22,12 @@
 │  │   Module     │   Module     │   Module     │   Module     │ │
 │  │    (JWT/SIWE)│     (CRUD)   │   (K/V)      │  (Vector DB) │ │
 │  └──────────────┴──────────────┴──────────────┴──────────────┘ │
+│  ┌──────────────┬──────────────────────────────────────────────┐ │
+│  │ Event System │           Queue System                       │ │
+│  │  • Events   │     • BullMQ Redis Queue                   │ │
+│  │  • Event    │     • Analysis Producer                     │ │
+│  │  • EventEmitter2   • Analysis Consumer                     │ │
+│  └──────────────┴──────────────────────────────────────────────┘ │
 │  ┌───────────────────────────────────────────────────────────┐ │
 │  │              Core Infrastructure Layer                    │ │
 │  │  (Guards, Filters, Middlewares, Base Services)           │ │
@@ -32,6 +38,8 @@
 ┌──────────┐   ┌──────────┐   ┌──────────────┐
 │ MongoDB/ │   │  Redis   │   │ Datastax     │
 │PostgreSQL│   │  Cache   │   │ Astra Vector │
+│          │   │ & Queue  │   │    DB       │
+│          │   │ (BullMQ) │   │             │
 └──────────┘   └──────────┘   └──────────────┘
                                        │
                                        ▼
@@ -56,6 +64,8 @@
 - **ORM**: MikroORM v6 with Mongoose
 - **Cache**: Redis (ioredis) with in-memory fallback
 - **Vector Database**: Datastax Astra DB
+- **Event System**: EventEmitter2 for in-process event communication
+- **Queue System**: BullMQ with Redis for async job processing
 
 ### Authentication & Security
 - **Strategies**: JWT, Local (bcrypt), SIWE (Ethereum)
@@ -657,6 +667,110 @@ query: string;
 @Min(1)
 @Max(100)
 topK: number;
+```
+
+## Event & Queue Architecture
+
+### Event Flow Architecture
+```
+Pitch Deck Upload → EventsService → EventEmitter2 → Queue Module → BullMQ Redis
+                        ↓                    ↓
+                Progress Events ← Consumer ← Producer
+```
+
+### Event System Components
+
+#### EventsService
+Provides type-safe event emission methods for pitch deck lifecycle:
+```typescript
+emitPitchDeckUploaded(payload: PitchDeckUploadedPayload)
+emitPitchDeckProcessing(deckId: string)
+emitPitchDeckReady(deckId: string)
+emitPitchDeckError(payload: PitchDeckErrorPayload)
+emitAnalysisStarted(deckId: string)
+emitAnalysisProgress(payload: AnalysisProgressPayload)
+emitAnalysisCompleted(payload: AnalysisCompletedPayload)
+```
+
+#### Event Constants (`events.constant.ts`)
+Centralized event names and payload interfaces:
+```typescript
+export const PITCHDECK_EVENTS = {
+  UPLOADED: 'pitchdeck.uploaded',
+  PROCESSING: 'pitchdeck.processing',
+  READY: 'pitchdeck.ready',
+  ERROR: 'pitchdeck.error',
+  ANALYSIS_STARTED: 'pitchdeck.analysis.started',
+  ANALYSIS_PROGRESS: 'pitchdeck.analysis.progress',
+  ANALYSIS_COMPLETED: 'pitchdeck.analysis.completed',
+} as const;
+```
+
+### Queue System Components
+
+#### AnalysisQueueProducer
+Manages job creation and tracking:
+```typescript
+addAnalysisJob(jobData: AnalysisJobData): Promise<string>        // Add to queue
+getJobState(jobId: string): Promise<JobState | null>            // Query status
+getJobProgress(jobId: string): Promise<ProgressData | null>      // Get progress
+removeJob(jobId: string): Promise<boolean>                      // Cancel job
+```
+
+#### AnalysisQueueConsumer
+Processes jobs with lifecycle management:
+- Job states: waiting, active, completed, failed, delayed
+- Progress tracking (0-100%) with real-time updates
+- Retry logic with exponential backoff (3 attempts, 2s delay)
+- Integration point for Phase 6 orchestration
+
+#### Queue Job Data Structures
+```typescript
+export interface AnalysisJobData {
+  deckId: string;        // Pitch deck entity ID
+  ownerId: string;       // User who owns deck
+  type: 'full'|'sector'|'stage'|'thesis'|'strengths'|'weaknesses'|'competitive';
+  priority?: number;     // 0 (highest) to 10 (lowest)
+}
+
+export interface AnalysisProgressPayload {
+  deckId: string;
+  progress: number;      // 0-100
+  step: string;          // Current step description
+  message?: string;     // Optional details
+}
+```
+
+### Event & Queue Integration
+
+#### Event Lifecycle
+1. **pitchdeck.uploaded** - File upload completes, triggers queue job creation
+2. **pitchdeck.processing** - Content extraction/chunking in progress
+3. **pitchdeck.ready** - Deck ready for AI analysis
+4. **pitchdeck.analysis.started** - Agent workflow begins
+5. **pitchdeck.analysis.progress** - Real-time progress updates (0-100%)
+6. **pitchdeck.analysis.completed** - All agents finish successfully
+7. **pitchdeck.error** - Processing/analysis failure
+
+#### Queue Configuration
+- **Backend**: Redis with BullMQ
+- **Retry Strategy**: Exponential backoff (3 attempts, 2s delay)
+- **Job Retention**: 100 completed jobs, 50 failed jobs
+- **Timeout**: 5 minutes per job
+- **Concurrency**: Configurable via `EVENT_QUEUE_CONCURRENCY`
+
+### Environment Variables for Event System
+```bash
+# Event Queue Redis Configuration
+EVENT_QUEUE_REDIS_URL=redis://localhost:6379
+EVENT_QUEUE_REDIS_PORT=6379
+EVENT_QUEUE_REDIS_USER=your-username
+EVENT_QUEUE_REDIS_PASSWORD=your-password
+EVENT_QUEUE_REDIS_DB=0
+EVENT_QUEUE_CONCURRENCY=5
+
+# Main Redis (fallback for event queue)
+REDIS_URL=redis://localhost:6379
 ```
 
 ### Logging Strategy

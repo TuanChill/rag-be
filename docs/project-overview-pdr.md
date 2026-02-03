@@ -157,6 +157,13 @@ Enterprise-grade backend service combining traditional web2 authentication with 
 - ✅ Swagger documentation
 - ✅ Docker containerization
 
+### Phase 1.5: Event Infrastructure (Complete ✅)
+- ✅ Event system with EventEmitter2 for pitch deck lifecycle
+- ✅ Queue system with BullMQ for async analysis processing
+- ✅ Type-safe event emission and job tracking
+- ✅ Redis-based queue with retry logic and progress updates
+- ✅ Integration with existing app.module.ts
+
 ### Phase 2: RAG Integration (Complete ✅)
 - ✅ LangChain pipeline setup
 - ✅ Datastax Astra vector store
@@ -179,9 +186,64 @@ Enterprise-grade backend service combining traditional web2 authentication with 
 - ✅ RagModule registration in app.module.ts
 - ✅ Module lifecycle hooks (onModuleInit)
 - ✅ Complete RAG service integration
-- ✅ Production-ready configuration
 - ✅ Error handling and logging
 - ✅ Health monitoring endpoints
+
+## Pitch Deck AI Analysis Engine (NEW)
+
+### Vision
+AI-powered analysis of pitch decks evaluating market fit, team strength, competitive positioning, and investment potential through multi-agent scoring and deep content analysis.
+
+### Phase Implementation Roadmap
+
+### Phase 1: Event Infrastructure (COMPLETE ✅)
+- ✅ Event system with EventEmitter2 for pitch deck lifecycle
+- ✅ Queue system with BullMQ for async analysis processing
+- ✅ Type-safe event emission and job tracking
+- ✅ Redis-based queue with retry logic and progress updates
+- ✅ Integration with existing app.module.ts
+
+### Phase 2: Analysis Entities (PENDING)
+- 📋 Pitch deck entity structure
+- 📋 User ownership and permissions
+- 📋 Analysis result models
+- 📋 Database schema design
+
+### Phase 3: Agent Framework (PENDING)
+- 📋 Agent base classes and interfaces
+- 📋 Configuration management system
+- 📋 Agent execution framework
+- 📋 Plugin architecture
+
+### Phase 4: Scoring Agents (PENDING)
+- 📋 Competitive analysis scoring agent
+- 📋 Market positioning evaluation agent
+- 📋 Risk assessment agent
+- 📋 Team strength assessment agent
+
+### Phase 5: Analysis Agents (PENDING)
+- 📋 Deep content analysis agent
+- 📋 Market trend analysis agent
+- 📋 Financial analysis agent
+- 📋 Technology assessment agent
+
+### Phase 6: Orchestration Service (PENDING)
+- 📋 Agent workflow coordination
+- 📋 Progress tracking and aggregation
+- 📋 Result compilation and scoring
+- 📋 Error handling and recovery
+
+### Phase 7: API Endpoints (PENDING)
+- 📋 Pitch deck upload API
+- 📋 Analysis results API
+- 📋 Progress tracking API
+- 📋 Scoring report generation
+
+### Phase 8: Integration Tests (PENDING)
+- 📋 End-to-end testing pipeline
+- 📋 Mock agent implementations
+- 📋 Performance testing
+- 📋 Load testing scenarios
 
 ### Phase 3: Production Hardening (Future)
 - 📋 Rate limiting and throttling

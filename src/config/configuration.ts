@@ -40,6 +40,18 @@ export default () => ({
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
-    embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-ada-002',
+    embeddingModel:
+      process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-ada-002',
+  },
+  eventQueue: {
+    redisUrl:
+      process.env.EVENT_QUEUE_REDIS_URL ||
+      process.env.REDIS_URL ||
+      'redis://localhost:6379',
+    redisPort: parseInt(process.env.EVENT_QUEUE_REDIS_PORT) || undefined,
+    redisUser: process.env.EVENT_QUEUE_REDIS_USER,
+    redisPassword: process.env.EVENT_QUEUE_REDIS_PASSWORD,
+    redisDb: parseInt(process.env.EVENT_QUEUE_REDIS_DB) || undefined,
+    concurrency: parseInt(process.env.EVENT_QUEUE_CONCURRENCY) || 5,
   },
 });

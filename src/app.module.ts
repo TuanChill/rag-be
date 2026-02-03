@@ -8,6 +8,7 @@ import {
 import { UserModule } from './api/user/user.module';
 import { AuthModule } from './api/auth/auth.module';
 import { RagModule } from './api/rag/rag.module';
+import { PitchDeckModule } from './api/pitchdeck/pitchdeck.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import configuration from './config/configuration';
@@ -19,12 +20,15 @@ import { redisStore } from 'cache-manager-redis-store';
 // import { RedisModule } from '@nestjs-modules/ioredis';
 import { AppConfigModule } from './api/app-config/app-config.module';
 import { SeederModule } from '@core/database/seeder/seeder.module';
+import { EventsModule } from './core/events/events.module';
+import { QueueModule } from './core/queue/queue.module';
 
 @Module({
   imports: [
     UserModule,
     AuthModule,
     RagModule,
+    PitchDeckModule,
     ConfigModule.forRoot({
       isGlobal: true,
       cache: false,
@@ -63,6 +67,8 @@ import { SeederModule } from '@core/database/seeder/seeder.module';
       },
     }),
     AppConfigModule,
+    EventsModule,
+    QueueModule,
     // import redis module here for some case that cache module don't work
     // RedisModule.forRootAsync({
     //   imports: [ConfigModule],
