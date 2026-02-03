@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { UserModule } from './api/user/user.module';
 import { AuthModule } from './api/auth/auth.module';
+import { RagModule } from './api/rag/rag.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import configuration from './config/configuration';
@@ -23,6 +24,7 @@ import { SeederModule } from '@core/database/seeder/seeder.module';
   imports: [
     UserModule,
     AuthModule,
+    RagModule,
     ConfigModule.forRoot({
       isGlobal: true,
       cache: false,

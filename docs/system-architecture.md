@@ -20,6 +20,7 @@
 │  ┌──────────────┬──────────────┬──────────────┬──────────────┐ │
 │  │    Auth      │     User     │  AppConfig   │     RAG      │ │
 │  │   Module     │   Module     │   Module     │   Module     │ │
+│  │    (JWT/SIWE)│     (CRUD)   │   (K/V)      │  (Vector DB) │ │
 │  └──────────────┴──────────────┴──────────────┴──────────────┘ │
 │  ┌───────────────────────────────────────────────────────────┐ │
 │  │              Core Infrastructure Layer                    │ │
@@ -150,13 +151,13 @@ UserController.getCurrentUser(@CurrentUser() user)
       └─► Returns sanitized user object
 ```
 
-### 4. RAG Service Layer (Phase 3 Implementation)
+### 4. RAG Module Integration (Phase 5 Complete)
 
 #### Service Architecture Pattern
 ```
-RagModule
+RagModule (Complete - Phase 5)
   │
-  ├─► RagService implements OnModuleInit/Destroy
+  ├─► RagService implements OnModuleInit
   │   ├─► Connection Management (AstraDB/Embeddings)
   │   ├─► Lifecycle Management (initialize/cleanup)
   │   ├─► Error Handling (try/catch with specific exceptions)
@@ -167,6 +168,9 @@ RagModule
         ├─► Similarity Search (queryDocuments)
         ├─► Document Deletion (deleteDocuments)
         └─► Health Endpoint (healthCheck)
+
+  └─► AppModule Integration
+        └─► RagModule imported and registered globally
 ```
 
 #### RAG Service Implementation Patterns
@@ -174,10 +178,14 @@ RagModule
 **1. Initialization Pattern**:
 ```typescript
 @Injectable()
-export class RagService implements OnModuleDestroy {
+export class RagService implements OnModuleInit {
   private vectorStore: AstraDBVectorStore | null = null;
   private embeddings: OpenAIEmbeddings | null = null;
   private isInitialized = false;
+
+  async onModuleInit(): Promise<void> {
+    await this.initialize();
+  }
 
   async initialize(): Promise<void> {
     // Initialize vector store and embeddings
@@ -774,6 +782,106 @@ QueryResult[]
 - Vector store errors throw 500 Internal Server Error
 - Invalid operations throw 422 Unprocessable Entity
 - All errors include structured error messages in response body
+
+## Onboarding Guide
+
+### Required Environment Variables
+
+**Database Configuration**:
+```bash
+DB_TYPE=mongodb                    # or postgresql
+MONGO_URI=mongodb://localhost:27017  # MongoDB connection string
+POSTGRES_HOST=localhost              # PostgreSQL host
+POSTGRES_PORT=5432                  # PostgreSQL port
+POSTGRES_USER=your_user            # PostgreSQL username
+POSTGRES_PASSWORD=your_password    # PostgreSQL password
+POSTGRES_DB=your_database         # PostgreSQL database name
+```
+
+**RAG Configuration**:
+```bash
+# Datastax Astra DB
+ASTRA_DB_ENDPOINT=https://your-endpoint
+ASTRA_DB_APPLICATION_TOKEN=your-token
+ASTRA_DB_COLLECTION=documents     # Default: 'documents'
+
+# OpenAI API
+OPENAI_API_KEY=your-openai-key
+OPENAI_EMBEDDING_MODEL=text-embedding-ada-002  # Optional
+```
+
+**Application Settings**:
+```bash
+# General
+NODE_ENV=development
+APP_PORT=8080
+JWT_SECRET=your-jwt-secret
+JWT_EXPIRATION=24h
+
+# Redis (Optional - fallbacks to in-memory cache)
+REDIS_URL=redis://localhost:6379
+REDIS_TTL=60000
+```
+
+### Setup Instructions
+
+1. **Install Dependencies**:
+   ```bash
+   pnpm install
+   ```
+
+2. **Environment Configuration**:
+   ```bash
+   cp env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Database Setup**:
+   - Start MongoDB: `docker run -d -p 27017:27017 --name mongo mongo:7`
+   - OR create PostgreSQL database
+
+4. **Start Application**:
+   ```bash
+   pnpm start:dev    # Development mode with watch
+   # or
+   pnpm start        # Production mode
+   ```
+
+5. **API Documentation**:
+   - Swagger UI: http://localhost:8080/api
+   - RAG Endpoints: http://localhost:8080/api/rag
+
+### Testing the RAG Module
+
+1. **Health Check**:
+   ```bash
+   curl http://localhost:8080/api/rag/health
+   # Expected: {"status":"healthy","collection":"documents","timestamp":"..."}
+   ```
+
+2. **Ingest Documents**:
+   ```bash
+   curl -X POST http://localhost:8080/api/rag/ingest \
+     -H "Content-Type: application/json" \
+     -d '{
+       "documents": [
+         {
+           "pageContent": "Your document content here",
+           "metadata": {"source": "manual", "author": "user"}
+         }
+       ]
+     }'
+   ```
+
+3. **Query Documents**:
+   ```bash
+   curl -X POST http://localhost:8080/api/rag/query \
+     -H "Content-Type: application/json" \
+     -d '{
+       "query": "What is the main topic?",
+       "topK": 5
+     }'
+   ```
 
 ## Unresolved Architecture Questions
 
