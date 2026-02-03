@@ -74,11 +74,11 @@ export class RagController {
 
   /**
    * DELETE /rag/documents
-   * Delete documents by IDs or filter
+   * Delete documents by IDs
    */
   @Delete('documents')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Delete documents by IDs or filter' })
+  @ApiOperation({ summary: 'Delete documents by IDs' })
   @ApiResponse({
     status: 200,
     description: 'Documents deleted',
@@ -91,7 +91,7 @@ export class RagController {
   })
   async deleteDocuments(@Body() dto: DeleteDocumentDto): Promise<DeleteResult> {
     this.logger.log(`Deleting documents`);
-    return await this.ragService.deleteDocuments(dto.ids, dto.filter);
+    return await this.ragService.deleteDocuments(dto.ids);
   }
 
   /**

@@ -101,14 +101,18 @@ export abstract class BaseAgent implements IAgent {
           this.state.completedAt = new Date();
 
           this.logger.error(
-            `Agent failed after ${attempt + 1} attempts: ${this.config.name} - ${this.state.errors[0].message}`,
+            `Agent failed after ${attempt + 1} attempts: ${
+              this.config.name
+            } - ${this.state.errors[0].message}`,
             error,
           );
           return this.handleError(error as Error);
         }
 
         this.logger.warn(
-          `Agent attempt ${attempt + 1} failed, retrying: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          `Agent attempt ${attempt + 1} failed, retrying: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
         );
 
         // Exponential backoff before retry

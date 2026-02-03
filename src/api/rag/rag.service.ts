@@ -118,14 +118,17 @@ export class RagService implements OnModuleDestroy {
       );
 
       // Add documents to vector store
-      const ids = await this.vectorStore.addDocuments(langchainDocs);
+      // Note: addDocuments returns void, not IDs
+      await this.vectorStore.addDocuments(langchainDocs);
 
-      this.logger.log(`Successfully ingested ${ids.length} documents`);
+      this.logger.log(
+        `Successfully ingested ${langchainDocs.length} documents`,
+      );
 
       return {
         success: true,
-        documentIds: ids,
-        count: ids.length,
+        documentIds: [], // IDs not returned by AstraDBVectorStore.addDocuments()
+        count: langchainDocs.length,
       };
     } catch (error) {
       this.logger.error('Failed to ingest documents', error);
@@ -179,39 +182,26 @@ export class RagService implements OnModuleDestroy {
   }
 
   /**
-   * Delete documents by IDs or filter
+   * Delete documents by IDs
+   * Note: Filter-based deletion is not supported by AstraDBVectorStore API
    */
-  async deleteDocuments(
-    ids?: string[],
-    filter?: Record<string, unknown>,
-  ): Promise<DeleteResult> {
+  async deleteDocuments(ids?: string[]): Promise<DeleteResult> {
     this.ensureInitialized();
 
     try {
-      if (!ids && !filter) {
-        throw new BadRequestException('Either ids or filter must be provided');
+      if (!ids || ids.length === 0) {
+        throw new BadRequestException('IDs must be provided for deletion');
       }
 
       this.logger.log('Deleting documents');
 
-      // Delete by IDs if provided
-      if (ids && ids.length > 0) {
-        await this.vectorStore.delete({ ids });
-        return {
-          success: true,
-          deletedCount: ids.length,
-        };
-      }
+      // AstraDBVectorStore.delete() only accepts { ids: string[] }
+      await this.vectorStore.delete({ ids });
 
-      // Delete by filter if provided
-      if (filter) {
-        await this.vectorStore.delete({ filter });
-        // Note: AstraDB may not return exact count for filter-based deletion
-        return {
-          success: true,
-          deletedCount: -1, // Unknown count for filter-based deletion
-        };
-      }
+      return {
+        success: true,
+        deletedCount: ids.length,
+      };
     } catch (error) {
       this.logger.error('Failed to delete documents', error);
       if (error instanceof BadRequestException) {

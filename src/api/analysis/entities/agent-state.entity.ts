@@ -1,4 +1,11 @@
-import { Entity, Property, PrimaryKey, ManyToOne, Rel, Index } from '@mikro-orm/core';
+import {
+  Entity,
+  Property,
+  PrimaryKey,
+  ManyToOne,
+  Rel,
+  Index,
+} from '@mikro-orm/core';
 import { ObjectId } from '@mikro-orm/mongodb';
 import { BaseEntity } from '@core/base/base.entity';
 import { AnalysisResult } from './analysis-result.entity';

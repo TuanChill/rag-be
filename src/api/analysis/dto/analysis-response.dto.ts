@@ -68,7 +68,10 @@ export class AnalysisResponseDto {
   @ApiProperty({ description: 'Analysis status' })
   status!: AnalysisStatus;
 
-  @ApiProperty({ description: 'Analysis type', enum: ['full', 'sector', 'stage', 'thesis'] })
+  @ApiProperty({
+    description: 'Analysis type',
+    enum: ['full', 'sector', 'stage', 'thesis'],
+  })
   analysisType!: AnalysisType;
 
   @ApiProperty({
@@ -101,21 +104,23 @@ export class AnalysisResponseDto {
       overallScore: entity.overallScore,
       status: entity.status,
       analysisType: entity.analysisType,
-      scores: entity.scores?.map((s) => ({
-        category: s.category,
-        score: s.score,
-        weight: s.weight,
-        details: s.details,
-        sourceAgent: s.sourceAgent,
-      })) || [],
-      findings: entity.findings?.map((f) => ({
-        type: f.type,
-        title: f.title,
-        description: f.description,
-        severity: f.severity,
-        source: f.source,
-        reference: f.reference,
-      })) || [],
+      scores:
+        entity.scores?.map((s) => ({
+          category: s.category,
+          score: s.score,
+          weight: s.weight,
+          details: s.details,
+          sourceAgent: s.sourceAgent,
+        })) || [],
+      findings:
+        entity.findings?.map((f) => ({
+          type: f.type,
+          title: f.title,
+          description: f.description,
+          severity: f.severity,
+          source: f.source,
+          reference: f.reference,
+        })) || [],
       createdAt: entity.createdAt,
       completedAt: entity.completedAt,
       jobId: entity.jobId,

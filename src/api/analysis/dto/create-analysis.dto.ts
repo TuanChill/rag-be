@@ -1,4 +1,11 @@
-import { IsOptional, IsEnum, IsUUID, IsNumber, Min, Max } from 'class-validator';
+import {
+  IsOptional,
+  IsEnum,
+  IsUUID,
+  IsNumber,
+  Min,
+  Max,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { AnalysisType } from '../types/analysis.types';
 

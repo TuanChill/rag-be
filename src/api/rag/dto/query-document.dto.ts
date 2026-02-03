@@ -1,15 +1,30 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 class FilterDto {
-  @ApiPropertyOptional({ description: 'Filter by source', example: 'user-upload' })
+  @ApiPropertyOptional({
+    description: 'Filter by source',
+    example: 'user-upload',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   source?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by title', example: 'Product Documentation' })
+  @ApiPropertyOptional({
+    description: 'Filter by title',
+    example: 'Product Documentation',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -20,6 +35,9 @@ class FilterDto {
   @IsString()
   @MaxLength(200)
   author?: string;
+
+  // Index signature to allow additional filter properties
+  [key: string]: unknown;
 }
 
 export class QueryDocumentDto {
@@ -29,7 +47,12 @@ export class QueryDocumentDto {
   @MaxLength(1000, { message: 'Query exceeds 1000 character limit' })
   query: string;
 
-  @ApiPropertyOptional({ description: 'Number of results to return', example: 5, minimum: 1, maximum: 100 })
+  @ApiPropertyOptional({
+    description: 'Number of results to return',
+    example: 5,
+    minimum: 1,
+    maximum: 100,
+  })
   @IsOptional()
   @IsInt()
   @Min(1)

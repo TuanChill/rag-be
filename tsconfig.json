@@ -16,6 +16,7 @@
       "@utils/*": ["src/utils/*"],
       "@config/*": ["src/config/*"],
       "@libs/*": ["src/libs/*"],
+      "@agents/*": ["src/agents/*"],
       "@/*": ["src/*"]
     },
     "incremental": true,
