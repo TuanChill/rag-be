@@ -33,4 +33,13 @@ export default () => ({
     type: process.env.REDIS_TYPE || 'single', // 'single' or 'cluster'
   },
   isEnableSeeder: parseInt(process.env.ENABLE_SEEDER) || 0,
+  astradb: {
+    token: process.env.ASTRA_DB_APPLICATION_TOKEN,
+    endpoint: process.env.ASTRA_DB_ENDPOINT,
+    collection: process.env.ASTRA_DB_COLLECTION || 'documents',
+  },
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY,
+    embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-ada-002',
+  },
 });
