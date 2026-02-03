@@ -1,6 +1,7 @@
 /**
  * Analysis Module
  * Phase 6: Orchestration Service - Implementation
+ * Phase 7: API Endpoints - Added controller, guard, interceptor
  *
  * Orchestrates all agents for pitch deck analysis
  */
@@ -19,6 +20,9 @@ import { OrchestratorService } from './services/orchestrator.service';
 import { CalculatorService } from './services/calculator.service';
 import { AnalysisRepository } from './repositories/analysis.repository';
 import { AnalysisJobProcessor } from './queue/analysis-job.processor';
+import { AnalysisController } from './analysis.controller';
+import { AnalysisTransformInterceptor } from './interceptors/transform.interceptor';
+import { AnalysisRateLimitGuard } from './guards/rate-limit.guard';
 
 @Module({
   imports: [
@@ -33,12 +37,15 @@ import { AnalysisJobProcessor } from './queue/analysis-job.processor';
     ScoringModule,
     AgentsAnalysisModule,
   ],
+  controllers: [AnalysisController],
   providers: [
     AnalysisService,
     OrchestratorService,
     CalculatorService,
     AnalysisRepository,
     AnalysisJobProcessor,
+    AnalysisTransformInterceptor,
+    AnalysisRateLimitGuard,
   ],
   exports: [AnalysisService, AnalysisJobProcessor],
 })

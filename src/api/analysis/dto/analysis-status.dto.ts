@@ -49,4 +49,37 @@ export class AnalysisStatusDto {
 
   @ApiProperty({ description: 'Start timestamp', required: false })
   startedAt?: Date;
+
+  /**
+   * Create from analysis entity
+   */
+  static fromEntity(data: {
+    uuid: string;
+    status: AnalysisStatus;
+    progress: number;
+    currentStep: string;
+    agents: Array<{
+      agentName: string;
+      status: AgentStatus;
+      executionOrder: number;
+      errorMessage?: string;
+    }>;
+    errorMessage?: string;
+    startedAt?: Date;
+  }): AnalysisStatusDto {
+    return {
+      uuid: data.uuid,
+      status: data.status,
+      progress: data.progress,
+      currentStep: data.currentStep,
+      agents: data.agents.map((a) => ({
+        agentName: a.agentName,
+        status: a.status,
+        executionOrder: a.executionOrder,
+        errorMessage: a.errorMessage,
+      })),
+      errorMessage: data.errorMessage,
+      startedAt: data.startedAt,
+    };
+  }
 }

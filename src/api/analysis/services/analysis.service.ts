@@ -4,7 +4,11 @@
  *
  * Main service for managing pitch deck analysis
  */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository, Reference } from '@mikro-orm/core';
 import { ObjectId } from '@mikro-orm/mongodb';
@@ -14,6 +18,7 @@ import { AnalysisResult } from '../entities/analysis-result.entity';
 import { AnalysisRepository } from '../repositories/analysis.repository';
 import { OrchestratorService } from './orchestrator.service';
 import { AnalysisQueueProducer } from '@core/queue/producers/analysis-queue.producer';
+import { AnalysisStatus, AgentStatus } from '../types/analysis.types';
 
 @Injectable()
 export class AnalysisService {
@@ -75,11 +80,17 @@ export class AnalysisService {
     ownerId: string,
   ): Promise<{
     uuid: string;
-    status: string;
+    status: AnalysisStatus;
     progress: number;
     currentStep: string;
-    agents: Array<{ agentName: string; status: string }>;
+    agents: Array<{
+      agentName: string;
+      status: AgentStatus;
+      executionOrder: number;
+      errorMessage?: string;
+    }>;
     errorMessage?: string;
+    startedAt?: Date;
   }> {
     const analysis = await this.analysisRepository.findOne(
       {
@@ -95,15 +106,18 @@ export class AnalysisService {
 
     return {
       uuid: analysis.uuid,
-      status: analysis.status,
+      status: analysis.status as AnalysisStatus,
       progress: this.calculateProgress(analysis),
       currentStep: this.getCurrentStep(analysis),
       agents:
         analysis.agentStates?.map((state) => ({
           agentName: state.agentName,
-          status: state.status,
+          status: state.status as AgentStatus,
+          executionOrder: state.executionOrder,
+          errorMessage: state.errorMessage,
         })) || [],
       errorMessage: analysis.errorMessage,
+      startedAt: analysis.startedAt,
     };
   }
 
@@ -144,5 +158,35 @@ export class AnalysisService {
     if (pending) return `Queued ${pending.agentName}`;
 
     return analysis.status;
+  }
+
+  async listAnalyses(
+    ownerId: string,
+    options?: {
+      status?: AnalysisStatus;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<AnalysisResult[]> {
+    return this.analysisRepository.findByOwner(ownerId, options);
+  }
+
+  async deleteAnalysis(analysisUuid: string, ownerId: string): Promise<void> {
+    const analysis = await this.analysisRepository.findOne({
+      uuid: analysisUuid,
+      owner: new ObjectId(ownerId),
+    });
+
+    if (!analysis) {
+      throw new NotFoundException('Analysis not found');
+    }
+
+    // Only allow deletion of pending/failed analyses
+    if (analysis.status === 'running') {
+      throw new BadRequestException('Cannot delete running analysis');
+    }
+
+    this.em.remove(analysis);
+    await this.em.flush();
   }
 }
