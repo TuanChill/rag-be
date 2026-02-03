@@ -937,6 +937,132 @@ describe('AnalysisQueueConsumer', () => {
 });
 ```
 
+## Analysis Module Standards (NEW)
+
+### Entity Standards for Analysis Module
+```typescript
+// Entity relationships for analysis domain
+@Entity({ collection: 'analysis_results' })
+export class AnalysisResult extends BaseEntity {
+  @PrimaryKey()
+  _id!: ObjectId;
+
+  @Index()
+  @Property()
+  uuid!: string;
+
+  @Index()
+  @Property()
+  status!: AnalysisStatus; // pending | running | completed | failed | cancelled
+
+  @Property()
+  overallScore?: number;
+
+  @ManyToOne(() => PitchDeck)
+  deck!: Rel<PitchDeck>;
+
+  @ManyToOne(() => User)
+  owner!: Rel<User>;
+
+  @OneToMany(() => AnalysisScore, (score) => score.analysis)
+  scores = new Collection<AnalysisScore>(this);
+
+  @OneToMany(() => AnalysisFinding, (finding) => finding.analysis)
+  findings = new Collection<AnalysisFinding>(this);
+
+  @OneToMany(() => AgentState, (state) => state.analysis)
+  agentStates = new Collection<AgentState>(this);
+}
+```
+
+### Weighted Scoring Implementation
+```typescript
+// AnalysisScore entity with weights
+@Entity({ collection: 'analysis_scores' })
+export class AnalysisScore extends BaseEntity {
+  @Index()
+  @Property()
+  category!: ScoreCategory; // sector | stage | thesis | history | overall
+
+  @Property()
+  score!: number; // 0-100
+
+  @Property()
+  weight!: number; // 0-1 (sector: 0.30, stage: 0.25, thesis: 0.25, history: 0.20)
+
+  @Property({ nullable: true })
+  details?: string;
+
+  @Property({ nullable: true })
+  sourceAgent?: string;
+}
+
+// Weight calculation
+function calculateOverallScore(scores: AnalysisScore[]): number {
+  return scores.reduce((total, score) => {
+    return total + (score.score * score.weight);
+  }, 0);
+}
+```
+
+### Agent State Tracking
+```typescript
+// Agent execution tracking
+@Entity({ collection: 'agent_states' })
+export class AgentState extends BaseEntity {
+  @Property()
+  agentName!: string; // SectorMatchAgent, StrengthsAgent, etc.
+
+  @Property()
+  status!: AgentStatus; // pending | running | completed | failed | skipped
+
+  @Property({ type: 'json', nullable: true })
+  input?: Record<string, unknown>;
+
+  @Property({ type: 'json', nullable: true })
+  output?: Record<string, unknown>;
+
+  @Property({ default: 0 })
+  retryCount!: number;
+
+  @Index()
+  @Property()
+  executionOrder!: number;
+}
+```
+
+### Analysis DTO Standards
+```typescript
+// Request DTO
+export class CreateAnalysisDto {
+  @IsUUID()
+  deckId!: string;
+
+  @IsEnum(['full', 'sector', 'stage', 'thesis'])
+  type?: AnalysisType = 'full';
+
+  @IsNumber()
+  @Min(1)
+  @Max(10)
+  priority?: number = 5;
+}
+
+// Response DTO
+export class AnalysisResponseDto {
+  @ApiProperty({ description: 'Analysis UUID' })
+  uuid!: string;
+
+  @ApiProperty({ description: 'Overall score (0-100)' })
+  overallScore?: number;
+
+  @ApiProperty({ type: [AnalysisScoreResponseDto] })
+  scores!: AnalysisScoreResponseDto[];
+
+  @ApiProperty({ type: [AnalysisFindingResponseDto] })
+  findings!: AnalysisFindingResponseDto[];
+}
+```
+
 ## Unresolved Questions
 
 1. Should we enforce absolute imports only (via ESLint rule)?
@@ -947,3 +1073,11 @@ describe('AnalysisQueueConsumer', () => {
 6. How should we handle event persistence and replay?
 7. Should we implement a dead-letter queue for failed jobs?
 8. What monitoring should we add for queue performance?
+9. Which job queue system to use (Bull vs. default Redis)?
+10. How will agents communicate with each other?
+11. What's the retry strategy for failed agents?
+12. How to handle partial analysis failures?
+13. Should WebSocket be implemented for real-time updates?
+14. Can multiple pitch decks be analyzed simultaneously?
+15. What are the constraints for concurrent analyses?
+16. How old analyses and agent states should be purged?

@@ -22,6 +22,7 @@ import { AppConfigModule } from './api/app-config/app-config.module';
 import { SeederModule } from '@core/database/seeder/seeder.module';
 import { EventsModule } from './core/events/events.module';
 import { QueueModule } from './core/queue/queue.module';
+import { AnalysisModule } from './api/analysis/analysis.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { QueueModule } from './core/queue/queue.module';
     AuthModule,
     RagModule,
     PitchDeckModule,
+    AnalysisModule,
     ConfigModule.forRoot({
       isGlobal: true,
       cache: false,

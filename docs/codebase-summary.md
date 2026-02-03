@@ -30,7 +30,7 @@ src/
 │   ├── decorators/
 │   │   └── current-user.decorator.ts  # @CurrentUser() param decorator
 │   ├── filter/
-│   │   └── http-exception.filter.ts  # Global error handler
+│   │   └── http-exception.filter.ts  # Global exception handler
 │   ├── guard/
 │   │   └── jwt.auth.guard.ts      # JWT route protection
 │   ├── middlewares/
@@ -67,16 +67,37 @@ src/
 │   │   ├── app-config.module.ts   # Module definition
 │   │   └── entities/
 │   │       └── app-config.entity.ts  # key/value/isPublic fields
-│   └── rag/                       # RAG module (8 files)
-│       ├── rag.service.ts         # LangChain + AstraDB + OpenAI integrations
-│       ├── rag.controller.ts     # REST endpoints for RAG operations
-│       ├── rag.module.ts          # Module definition with lifecycle hooks
+│   ├── rag/                       # RAG module (8 files)
+│   │   ├── rag.service.ts         # LangChain + AstraDB + OpenAI integrations
+│   │   ├── rag.controller.ts     # REST endpoints for RAG operations
+│   │   ├── rag.module.ts          # Module definition with lifecycle hooks
+│   │   ├── entities/
+│   │   │   └── document.entity.ts # Document metadata entity
+│   │   └── dto/
+│   │       ├── ingest-document.dto.ts     # Multi-document ingestion
+│   │       ├── query-document.dto.ts      # Query with filters
+│   │       └── delete-document.dto.ts    # Conditional deletion
+│   ├── analysis/                  # AI Analysis Engine (12 files) - NEW
+│   │   ├── analysis.module.ts     # Module definition
+│   │   ├── entities/
+│   │   │   ├── analysis-result.entity.ts   # Main analysis container
+│   │   │   ├── analysis-score.entity.ts     # Component scoring with weights
+│   │   │   ├── analysis-finding.entity.ts  # Strengths/weaknesses
+│   │   │   └── agent-state.entity.ts      # Agent execution tracking
+│   │   ├── dto/
+│   │   │   ├── create-analysis.dto.ts      # Request DTO
+│   │   │   ├── analysis-response.dto.ts    # Response DTO
+│   │   │   └── analysis-status.dto.ts      # Status tracking
+│   │   └── types/
+│   │       └── analysis.types.ts          # Type definitions
+│   └── pitchdeck/                # Pitch deck management (7 files)
+│       ├── pitch-deck.service.ts  # Pitch deck CRUD operations
+│       ├── pitch-deck.controller.ts  # REST endpoints
+│       ├── pitch-deck.module.ts   # Module definition
 │       ├── entities/
-│       │   └── document.entity.ts # Document metadata entity
+│       │   └── pitch-deck.entity.ts  # Pitch deck metadata
 │       └── dto/
-│           ├── ingest-document.dto.ts     # Multi-document ingestion
-│           ├── query-document.dto.ts      # Query with filters
-│           └── delete-document.dto.ts    # Conditional deletion
+│           └── *.dto.ts          # Data transfer objects
 ├── utils/                          # Shared utilities (4 files)
 │   ├── hardware.util.ts            # Memory usage formatter
 │   ├── array.util.ts               # Seeder diff helpers
@@ -93,7 +114,7 @@ src/
 |-------|-------|---------|
 | Root | 3 | Bootstrap, configuration, app module |
 | Core | 17 | Infrastructure, guards, filters, base classes |
-| API | 28 | Business logic (Auth, User, AppConfig, RAG) |
+| API | 40+ | Business logic (Auth, User, AppConfig, RAG, Analysis, PitchDeck) |
 | Utils | 4 | Shared utilities |
 | Test | 8+ | Unit and e2e tests |
 | **Total** | **~82** | **Application code + tests** |
@@ -120,6 +141,12 @@ AppModule (root)
 │   ├── RAGService (AstraDB + LangChain + OpenAI)
 │   ├── OnModuleInit/Destroy lifecycle hooks
 │   └── Configuration (AstraDB, OpenAI API)
+├── AnalysisModule (NEW)
+│   ├── Entities (AnalysisResult, AnalysisScore, AnalysisFinding, AgentState)
+│   ├── MikroOrmModule.forFeature([...])
+│   └── Ready for Phase 3 service layer
+├── PitchDeckModule
+│   └── PitchDeckService → BaseService<PitchDeck>
 └── SeederModule
     └── DatabaseSeeder → AppConfigSeeder
 ```
@@ -159,7 +186,21 @@ The RAG module implements LangChain with AstraDB vector database:
 - **Lifecycle**: OnModuleInit for DB connection, OnModuleDestroy for cleanup
 - **Similarity**: Cosine similarity for document matching
 
-### 4. Middleware Pipeline
+### 4. Event & Queue System (Phase 1.5)
+Event-driven architecture with BullMQ for async processing:
+- **Events**: EventEmitter2 for pitch deck lifecycle events
+- **Queue**: BullMQ with Redis for analysis job processing
+- **Progress Tracking**: Real-time job status updates
+- **Retry Logic**: Exponential backoff for failed jobs
+
+### 5. Analysis Module (Phase 2)
+AI-powered analysis engine with entity-based architecture:
+- **Entities**: AnalysisResult, AnalysisScore, AnalysisFinding, AgentState
+- **Weighted Scoring**: Transparent algorithm with configurable weights
+- **Agent Tracking**: Complete execution history and debugging
+- **Status Management**: Workflow states for analyses and agents
+
+### 6. Middleware Pipeline
 ```
 Incoming Request
   ↓
@@ -176,14 +217,14 @@ HttpExceptionFilter (error handling)
 Response
 ```
 
-### 5. Idempotent Seeder Pattern
+### 7. Idempotent Seeder Pattern
 Database initialization with diff-based updates:
 - Enabled via `ENABLE_SEEDER` environment variable
 - Compares existing vs. expected state
 - Only creates/updates/deletes differences
 - OnModuleInit lifecycle hook execution
 
-### 6. Path Alias System
+### 8. Path Alias System
 TypeScript path mappings for clean imports:
 
 | Alias | Resolves To | Usage |
@@ -235,6 +276,10 @@ TypeScript path mappings for clean imports:
 - `@datastax/astra-db-ts`: Vector database
 - `openai`: OpenAI API client
 
+### Event & Queue
+- `eventemitter2`: Enhanced event emission
+- `bullmq`: Redis-based queue processing
+
 ### Caching
 - `ioredis`: Redis client
 - `cache-manager`: NestJS caching abstraction
@@ -261,6 +306,7 @@ TypeScript path mappings for clean imports:
 | Strategy | `*.ts` (in strategies/) | `jwt.ts` |
 | Seeder | `*.seeder.ts` | `app-config.seeder.ts` |
 | Utility | `*.util.ts` | `hardware.util.ts` |
+| Type | `*.types.ts` | `analysis.types.ts` |
 
 ## RAG Module Details
 
@@ -287,6 +333,31 @@ class RAGService {
 - **IngestDocumentDto**: Multi-document ingestion with metadata
 - **QueryDocumentDto**: Query with topK, score threshold, and filters
 - **DeleteDocumentDto**: Conditional deletion by IDs or filter
+
+## Analysis Module Details (NEW)
+
+### Entities
+- **AnalysisResult**: Main analysis container with workflow status
+- **AnalysisScore**: Component scores with weighted algorithm
+- **AnalysisFinding**: Strengths, weaknesses, opportunities, threats
+- **AgentState**: Agent execution tracking and debugging
+
+### Scoring Algorithm
+```typescript
+weights = {
+  sector: 0.30,    // Market fit assessment
+  stage: 0.25,     // Company maturity
+  thesis: 0.25,    // Business evaluation
+  history: 0.20    // Performance track record
+}
+
+overallScore = Σ(categoryScore × weight)
+```
+
+### API Contract (Ready for Phase 4)
+- **Create Analysis**: `POST /analysis` with CreateAnalysisDto
+- **Get Results**: `GET /analysis/:uuid` with AnalysisResponseDto
+- **Status Polling**: `GET /analysis/:uuid/status` with AnalysisStatusDto
 
 ## Testing Structure
 
@@ -328,11 +399,17 @@ Running Container
 ## Recent Updates
 
 ### Phase 2 Implementation Complete ✅
-- RAG module with full implementation
-- LangChain + AstraDB + OpenAI integration
-- Document ingestion, query, and delete operations
-- Vector similarity search with cosine metric
-- Lifecycle hooks for database connection management
+- Analysis module with complete entity suite
+- Weighted scoring algorithm implementation
+- Agent state tracking for debugging
+- Full DTO coverage for requests/responses
+- Module integration in app.module.ts
+
+### Phase 1.5 Implementation Complete ✅
+- Event system with EventEmitter2
+- Queue system with BullMQ for async processing
+- Type-safe event emission and job tracking
+- Redis-based queue with retry logic
 
 ### Phase 1 Foundation Complete ✅
 - Multi-database support (MongoDB/PostgreSQL)
@@ -351,3 +428,11 @@ Running Container
 4. Should we implement document preprocessing (chunking, cleaning)?
 5. How to handle rate limiting on OpenAI API calls?
 6. What are the backup/restore strategies for vector data?
+7. Which job queue system to use (Bull vs. default Redis)?
+8. How will agents communicate with each other?
+9. What's the retry strategy for failed agents?
+10. How to handle partial analysis failures?
+11. Should WebSocket be implemented for real-time updates?
+12. Can multiple pitch decks be analyzed simultaneously?
+13. What are the constraints for concurrent analyses?
+14. How old analyses and agent states should be purged?

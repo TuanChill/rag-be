@@ -997,6 +997,62 @@ REDIS_TTL=60000
      }'
    ```
 
+## Analysis Module Architecture (NEW)
+
+### Entity Relationship Diagram
+```
+User (1:N) → AnalysisResult (1:N) → AnalysisScore
+                    ↓                    ↓
+                    ↓              AnalysisFinding
+                    ↓                    ↓
+                PitchDeck (1:1)     AgentState
+```
+
+### Analysis Data Flow
+```
+Pitch Deck Upload → CreateAnalysisJob → Agent Execution → Scoring → Results
+```
+
+### Agent System Architecture
+- **Agent Base Classes**: Abstract base for all analysis agents
+- **Specialized Agents**: SectorMatchAgent, StrengthsAgent, WeaknessesAgent, etc.
+- **Agent Orchestration**: Sequential execution with dependency management
+- **Execution Tracking**: Real-time progress via AgentState entities
+
+### Weighted Scoring System
+```typescript
+// Scoring weights (configurable)
+weights = {
+  sector: 0.30,    // Market fit assessment
+  stage: 0.25,     // Company maturity
+  thesis: 0.25,    // Business evaluation
+  history: 0.20    // Performance track record
+}
+
+// Overall score calculation
+overallScore = Σ(categoryScore × weight)
+```
+
+### Database Schema Updates
+**MongoDB Collections**:
+- `analysis_results` - Main analysis records
+- `analysis_scores` - Component scores with weights
+- `analysis_findings` - Qualitative insights
+- `agent_states` - Agent execution logs
+
+**PostgreSQL Tables**:
+- `analysis_results` - UUID-based analysis tracking
+- `analysis_scores` - Category-based scoring with weights
+- `analysis_findings` - Structured findings data
+- `agent_states` - JSON execution state logs
+
+### API Endpoint Architecture
+```
+POST /analysis { deckId, type, priority } → CreateAnalysisResponse
+GET  /analysis/:uuid → AnalysisResults
+GET  /analysis/:uuid/status → ProgressTracking
+```
+
 ## Unresolved Architecture Questions
 
 1. **Multi-Tenancy**: How to isolate data per organization?
@@ -1009,3 +1065,7 @@ REDIS_TTL=60000
 8. **API Versioning**: How to handle breaking API changes?
 9. **WebSockets**: Is real-time communication needed for RAG?
 10. **Message Queue**: Do we need RabbitMQ/SQS for async jobs?
+11. **Agent Communication**: How will agents exchange data during execution?
+12. **Parallel Processing**: Can multiple agents run simultaneously?
+13. **Resource Management**: What are the memory/CPU limits per analysis?
+14. **Data Retention**: How long should old analysis results be kept?

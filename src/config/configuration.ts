@@ -54,4 +54,12 @@ export default () => ({
     redisDb: parseInt(process.env.EVENT_QUEUE_REDIS_DB) || undefined,
     concurrency: parseInt(process.env.EVENT_QUEUE_CONCURRENCY) || 5,
   },
+  analysis: {
+    maxDeckSizeMb: parseInt(process.env.ANALYSIS_MAX_DECK_SIZE_MB) || 50,
+    chunkSize: parseInt(process.env.ANALYSIS_CHUNK_SIZE) || 1000,
+    chunkOverlap: parseInt(process.env.ANALYSIS_CHUNK_OVERLAP) || 200,
+    maxIterations: parseInt(process.env.AGENT_MAX_ITERATIONS) || 10,
+    timeoutMs: parseInt(process.env.AGENT_TIMEOUT_MS) || 300000,
+    temperature: parseFloat(process.env.AGENT_TEMPERATURE) || 0.7,
+  },
 });
