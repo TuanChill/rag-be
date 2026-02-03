@@ -50,12 +50,30 @@ feature-name/
 ├── entities/
 │   └── feature-name.entity.ts  # Database entity
 ├── dto/
+│   ├── index.ts                # Export barrel
 │   ├── create-feature.dto.ts   # Request DTOs
 │   └── update-feature.dto.ts
+├── types/
+│   └── feature.types.ts        # TypeScript interfaces
 ├── interceptor/
 │   └── feature.interceptor.ts  # Response transformation
 └── guards/
     └── feature.guard.ts        # Authorization logic
+```
+
+### RAG Module Example (Phase 2 Implementation)
+```
+rag/
+├── rag.module.ts               # ConfigModule import, lifecycle hooks
+├── rag.controller.ts           # REST endpoints with @ApiTags
+├── rag.service.ts              # Vector DB + LLM integration
+├── dto/
+│   ├── index.ts                # Central export
+│   ├── ingest-document.dto.ts  # Multi-document ingestion
+│   ├── query-document.dto.ts   # Query with filters
+│   └── delete-document.dto.ts  # Conditional deletion
+└── types/
+    └── rag.types.ts            # IngestResult, QueryResult, etc.
 ```
 
 ### Module Template
@@ -215,21 +233,24 @@ export class FeatureController {
 ### Request DTO Pattern
 ```typescript
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail, MinLength } from 'class-validator';
+import { IsString, IsOptional, IsEmail, MinLength, MaxLength } from 'class-validator';
 
 export class CreateFeatureDto {
   @ApiProperty({ description: 'Feature name', example: 'My Feature' })
   @IsString()
   @MinLength(3)
+  @MaxLength(200)
   name: string;
 
   @ApiPropertyOptional({ description: 'Feature description' })
   @IsString()
   @IsOptional()
+  @MaxLength(1000)
   description?: string;
 
   @ApiProperty({ example: 'user@example.com' })
   @IsEmail()
+  @MaxLength(255)
   email: string;
 }
 ```
@@ -240,6 +261,86 @@ export class CreateFeatureDto {
 - **Naming**: `Create*Dto`, `Update*Dto`, `*ResponseDto`
 - **Transformation**: Use `class-transformer` for type coercion
 - **Partial Updates**: Extend `PartialType(CreateDto)` for update DTOs
+- **Security**: Always use `@MaxLength()` to prevent payload attacks
+
+### Advanced Validation Patterns (RAG Module)
+
+**Nested Object Validation**:
+```typescript
+import { ValidateNested, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class DocumentMetadataDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  title?: string;
+}
+
+class DocumentDto {
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(100000, { message: 'Document content exceeds 100KB limit' })
+  pageContent: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DocumentMetadataDto)
+  metadata?: DocumentMetadataDto;
+}
+
+export class IngestDocumentDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DocumentDto)
+  documents: DocumentDto[];
+}
+```
+
+**Conditional Validation**:
+```typescript
+import { ValidateIf } from 'class-validator';
+
+export class DeleteDocumentDto {
+  @ValidateIf((o) => !o.filter)
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  ids?: string[];
+
+  @ValidateIf((o) => !o.ids)
+  @ValidateNested()
+  @Type(() => DeleteFilterDto)
+  filter?: DeleteFilterDto;
+}
+```
+
+**Numeric Range Validation**:
+```typescript
+import { IsInt, Min, Max } from 'class-validator';
+
+export class QueryDocumentDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  topK?: number = 5;
+}
+```
+
+### Security Best Practices
+1. **MaxLength Protection**: Always set `@MaxLength()` to prevent DoS
+   - Text fields: 500-1000 chars
+   - Long content: 100KB max
+   - IDs: 100 chars
+2. **Explicit Type Conversion**: Use `@Type(() => ClassName)` for nested objects
+3. **Custom Error Messages**: Provide clear validation messages
+4. **Default Values**: Use TypeScript defaults for optional fields
 
 ## Authentication Patterns
 

@@ -47,6 +47,7 @@
 - **Framework**: NestJS v11 (Express-based)
 - **Language**: TypeScript 5.3.3 (ES2020)
 - **Package Manager**: pnpm
+- **Validation**: class-validator, class-transformer
 
 ### Data Layer
 - **Primary Database**: MongoDB (document store)
@@ -154,28 +155,37 @@ UserController.getCurrentUser(@CurrentUser() user)
 ```
 Client
   │
-  │ POST /rag/query { question: "What is...?" }
+  │ POST /rag/query { query: "What is...?", topK: 5, filter: {...} }
+  ▼
+QueryDocumentDto (Validation)
+  │
+  ├─► @IsNotEmpty() query: string
+  ├─► @MaxLength(1000) query validation
+  ├─► @Min(1) @Max(100) topK validation
+  └─► @ValidateNested() filter validation
+  ▼
+RagController
   ▼
 RagService
   │
   ├─► OpenAI Embeddings API
-  │   └─► text-embedding-ada-002(question)
+  │   └─► text-embedding-ada-002(query)
   │       └─► Returns vector [0.123, 0.456, ...]
   │
   ├─► Datastax Astra DB Vector Search
-  │   └─► findSimilarVectors(vector, k=5)
-  │       └─► Returns top 5 matching documents
+  │   └─► findSimilarVectors(vector, topK, filter)
+  │       └─► Returns top K matching documents
   │
   ├─► LangChain Context Assembly
-  │   └─► Combine retrieved docs + question
+  │   └─► Combine retrieved docs + query
   │
   ├─► OpenAI GPT API
   │   └─► chat.completions.create({
   │         model: "gpt-4",
-  │         messages: [context + question]
+  │         messages: [context + query]
   │       })
   │
-  └─► Returns augmented response
+  └─► Returns QueryResult[] with metadata
 ```
 
 ## Database Architecture
