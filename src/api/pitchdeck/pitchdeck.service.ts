@@ -7,20 +7,10 @@ import { PitchDeck, DeckStatus } from './entities/pitch-deck.entity';
 import { DeckChunk } from './entities/deck-chunk.entity';
 import { UploadDeckDto } from './dto/upload-deck.dto';
 import { User } from '../user/entities/user.entity';
+import { MIME_TO_EXT } from './constants/file-types';
 import { v4 as uuidv4 } from 'uuid';
 import { promises as fs } from 'fs';
 import { join, extname } from 'path';
-
-// Map MIME types to safe file extensions (prevents path traversal)
-const MIME_TO_EXT: Record<string, string> = {
-  'application/pdf': 'pdf',
-  'application/vnd.ms-powerpoint': 'ppt',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation':
-    'pptx',
-  'application/msword': 'doc',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-    'docx',
-};
 
 @Injectable()
 export class PitchDeckService extends BaseService<PitchDeck> {
@@ -77,19 +67,17 @@ export class PitchDeckService extends BaseService<PitchDeck> {
       await fs.rename(tempPath, storagePath);
 
       // Create PitchDeck entity with user reference
+      // TODO: Phase 03 - Refactor for multi-file upload (create PitchDeckFile entities)
       pitchDeck = this.pitchDeckRepository.create({
         uuid,
         title: dto.title,
         description: dto.description,
-        originalFileName: file.originalname,
-        mimeType: file.mimetype as PitchDeck['mimeType'],
-        fileSize: file.size,
-        storagePath,
         status: 'uploading' as DeckStatus,
         chunkCount: 0,
         astraCollection: 'pitch_decks',
         owner: Reference.createFromPK(User, new ObjectId(ownerId)),
         tags: dto.tags,
+        fileCount: 1, // TODO: Phase 03 - Calculate from files array
         lastAccessedAt: new Date(),
       });
 
@@ -162,16 +150,21 @@ export class PitchDeckService extends BaseService<PitchDeck> {
     this.logger.log(`Deleting pitch deck: ${uuid}`);
 
     // Delete file from disk
+    // TODO: Phase 03 - Delete all files in deck.files collection
     try {
-      await fs.unlink(deck.storagePath);
+      // const files = await deck.files.loadItems();
+      // for (const file of files) {
+      //   await fs.unlink(file.storagePath);
+      // }
+      this.logger.warn('File deletion not implemented until Phase 03');
     } catch (error) {
-      this.logger.warn(`Failed to delete file: ${deck.storagePath}`, error);
+      this.logger.warn('Failed to delete files', error);
     }
 
     // Delete chunks
     await this.deckChunkRepository.nativeDelete({ deck: deck._id });
 
-    // Delete entity
+    // Delete entity (cascade will delete PitchDeckFile entities)
     await this.em.remove(deck).flush();
 
     this.logger.log(`Pitch deck deleted: ${uuid}`);

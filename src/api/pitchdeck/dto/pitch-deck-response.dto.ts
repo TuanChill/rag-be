@@ -14,14 +14,15 @@ export class PitchDeckResponseDto {
   @ApiProperty({ required: false })
   description?: string;
 
-  @ApiProperty()
-  originalFileName!: string;
+  // TODO: Phase 02 - Replace with files array
+  @ApiProperty({ required: false })
+  originalFileName?: string;
 
-  @ApiProperty()
-  mimeType!: string;
+  @ApiProperty({ required: false })
+  mimeType?: string;
 
-  @ApiProperty()
-  fileSize!: number;
+  @ApiProperty({ required: false })
+  fileSize?: number;
 
   @ApiProperty()
   status!: DeckStatus;
@@ -50,9 +51,10 @@ export class PitchDeckResponseDto {
       uuid: entity.uuid,
       title: entity.title,
       description: entity.description,
-      originalFileName: entity.originalFileName,
-      mimeType: entity.mimeType,
-      fileSize: entity.fileSize,
+      // TODO: Phase 02 - Populate from files array
+      originalFileName: undefined,
+      mimeType: undefined,
+      fileSize: undefined,
       status: entity.status,
       chunkCount: entity.chunkCount,
       errorMessage: entity.errorMessage,

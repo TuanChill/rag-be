@@ -6,19 +6,16 @@ import {
   OneToMany,
   Collection,
   Rel,
+  Cascade,
 } from '@mikro-orm/core';
 import { ObjectId } from '@mikro-orm/mongodb';
 import { BaseEntity } from '../../../core/base/base.entity';
 import { User } from '../../user/entities/user.entity';
 import { DeckChunk } from './deck-chunk.entity';
+import { PitchDeckFile } from './pitch-deck-file.entity';
+import { MimeType } from '../constants/file-types';
 
 export type DeckStatus = 'uploading' | 'processing' | 'ready' | 'error';
-export type MimeType =
-  | 'application/pdf'
-  | 'application/vnd.ms-powerpoint'
-  | 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-  | 'application/msword'
-  | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 @Entity({ collection: 'pitch_decks' })
 export class PitchDeck extends BaseEntity {
@@ -33,18 +30,6 @@ export class PitchDeck extends BaseEntity {
 
   @Property({ nullable: true })
   description?: string;
-
-  @Property()
-  originalFileName!: string;
-
-  @Property()
-  mimeType!: MimeType;
-
-  @Property()
-  fileSize!: number;
-
-  @Property()
-  storagePath!: string;
 
   @Property()
   status!: DeckStatus;
@@ -63,6 +48,14 @@ export class PitchDeck extends BaseEntity {
 
   @OneToMany(() => DeckChunk, (chunk) => chunk.deck)
   chunks = new Collection<DeckChunk>(this);
+
+  @OneToMany(() => PitchDeckFile, (file) => file.deck, {
+    cascade: [Cascade.REMOVE],
+  })
+  files = new Collection<PitchDeckFile>(this);
+
+  @Property()
+  fileCount!: number;
 
   @Property({ nullable: true })
   tags?: string[];
