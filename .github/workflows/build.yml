@@ -1,0 +1,48 @@
+name: Build workflow
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+    branches:
+      - dev
+      - main
+
+jobs:
+  build:
+    name: nestjs base build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: ./pnpm-lock.yaml
+
+      - name: Install dependencies
+        # Skip post-install scripts here, as a malicious
+        # script could steal NODE_AUTH_TOKEN.
+        run: pnpm i --frozen-lock --ignore-scripts
+
+      - name: Lint
+        run: pnpm lint
+        continue-on-error: false
+
+      - name: Test
+        run: pnpm test
+        continue-on-error: false
+
+      - name: Build
+        run: pnpm build
