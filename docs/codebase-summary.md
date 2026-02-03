@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Total TypeScript Files**: 41
+**Total TypeScript Files**: 82 files
 **Architecture**: 3-Layer Clean Architecture (Root, Core, API)
 **Design Philosophy**: YAGNI/KISS/DRY
 **Module System**: NestJS dependency injection with explicit imports
@@ -24,12 +24,11 @@ src/
 │   │   ├── database.ts            # MikroORM multi-DB config
 │   │   └── seeder/
 │   │       ├── seeder.service.ts  # OnModuleInit seeding orchestrator
-│   │       └── scripts/
+│   │       ├── scripts/
 │   │           └── app-config.seeder.ts  # Diff-based config updates
+│   │       └── data/app-config.data.ts  # Seed data
 │   ├── decorators/
 │   │   └── current-user.decorator.ts  # @CurrentUser() param decorator
-│   ├── docs/
-│   │   └── swagger.ts             # Swagger/OpenAPI setup
 │   ├── filter/
 │   │   └── http-exception.filter.ts  # Global error handler
 │   ├── guard/
@@ -42,7 +41,7 @@ src/
 │   │       └── redis.service.ts   # Redis wrapper (ioredis)
 │   └── pipe/
 │       └── parse-objectid.pipe.ts # MongoDB ObjectId transformer
-├── api/                            # Business logic layer (16 files)
+├── api/                            # Business logic layer (28 files)
 │   ├── auth/                      # Authentication module (9 files)
 │   │   ├── auth.service.ts        # Login/signIn business logic
 │   │   ├── auth.controller.ts     # POST /auth/login, /auth/signIn
@@ -62,16 +61,30 @@ src/
 │   │   │   └── *.dto.ts           # Data transfer objects
 │   │   └── interceptor/
 │   │       └── user.interceptor.ts  # Custom serializer
-│   └── app-config/                # Dynamic config module (4 files)
-│       ├── app-config.service.ts  # extends BaseService<AppConfig>
-│       ├── app-config.controller.ts  # Config CRUD endpoints
-│       ├── app-config.module.ts   # Module definition
-│       └── entities/
-│           └── app-config.entity.ts  # key/value/isPublic fields
-└── utils/                          # Shared utilities (5 files)
-    ├── hardware.util.ts            # Memory usage formatter
-    ├── array.util.ts               # Seeder diff helpers
-    └── decimal.util.ts             # Decimal.js precision math wrapper
+│   ├── app-config/                # Dynamic config module (4 files)
+│   │   ├── app-config.service.ts  # extends BaseService<AppConfig>
+│   │   ├── app-config.controller.ts  # Config CRUD endpoints
+│   │   ├── app-config.module.ts   # Module definition
+│   │   └── entities/
+│   │       └── app-config.entity.ts  # key/value/isPublic fields
+│   └── rag/                       # RAG module (8 files)
+│       ├── rag.service.ts         # LangChain + AstraDB + OpenAI integrations
+│       ├── rag.controller.ts     # REST endpoints for RAG operations
+│       ├── rag.module.ts          # Module definition with lifecycle hooks
+│       ├── entities/
+│       │   └── document.entity.ts # Document metadata entity
+│       └── dto/
+│           ├── ingest-document.dto.ts     # Multi-document ingestion
+│           ├── query-document.dto.ts      # Query with filters
+│           └── delete-document.dto.ts    # Conditional deletion
+├── utils/                          # Shared utilities (4 files)
+│   ├── hardware.util.ts            # Memory usage formatter
+│   ├── array.util.ts               # Seeder diff helpers
+│   ├── decimal.util.ts             # Decimal.js precision math wrapper
+│   └── fixed.util.ts               # Ethers.js FixedNumber wrapper
+└── test/                           # Test suite
+    ├── app.e2e-spec.ts             # End-to-end tests
+    └── *.spec.ts                   # Unit tests
 ```
 
 ## File Count by Layer
@@ -80,9 +93,10 @@ src/
 |-------|-------|---------|
 | Root | 3 | Bootstrap, configuration, app module |
 | Core | 17 | Infrastructure, guards, filters, base classes |
-| API | 16 | Business logic (Auth, User, AppConfig) |
-| Utils | 5 | Shared utilities |
-| **Total** | **41** | **Application code** |
+| API | 28 | Business logic (Auth, User, AppConfig, RAG) |
+| Utils | 4 | Shared utilities |
+| Test | 8+ | Unit and e2e tests |
+| **Total** | **~82** | **Application code + tests** |
 
 ## Module Dependency Graph
 
@@ -102,6 +116,10 @@ AppModule (root)
 │   └── SiweService
 ├── AppConfigModule
 │   └── AppConfigService → BaseService<AppConfig>
+├── RAGModule
+│   ├── RAGService (AstraDB + LangChain + OpenAI)
+│   ├── OnModuleInit/Destroy lifecycle hooks
+│   └── Configuration (AstraDB, OpenAI API)
 └── SeederModule
     └── DatabaseSeeder → AppConfigSeeder
 ```
@@ -134,7 +152,14 @@ Runtime database switching via `DB_TYPE` environment variable:
 - **PostgreSQL**: PostgreSqlDriver with connection pooling
 - **Seamless Switching**: No code changes required
 
-### 3. Middleware Pipeline
+### 3. RAG Module Integration
+The RAG module implements LangChain with AstraDB vector database:
+- **Vector Store**: Datastax Astra DB with 1536 dimensions (OpenAI embeddings)
+- **Document Operations**: Ingest, query, delete with filtering
+- **Lifecycle**: OnModuleInit for DB connection, OnModuleDestroy for cleanup
+- **Similarity**: Cosine similarity for document matching
+
+### 4. Middleware Pipeline
 ```
 Incoming Request
   ↓
@@ -151,14 +176,14 @@ HttpExceptionFilter (error handling)
 Response
 ```
 
-### 4. Idempotent Seeder Pattern
+### 5. Idempotent Seeder Pattern
 Database initialization with diff-based updates:
 - Enabled via `ENABLE_SEEDER` environment variable
 - Compares existing vs. expected state
 - Only creates/updates/deletes differences
 - OnModuleInit lifecycle hook execution
 
-### 5. Path Alias System
+### 6. Path Alias System
 TypeScript path mappings for clean imports:
 
 | Alias | Resolves To | Usage |
@@ -208,6 +233,7 @@ TypeScript path mappings for clean imports:
 ### RAG & AI
 - `@langchain/community`, `@langchain/core`, `@langchain/openai`: LLM orchestration
 - `@datastax/astra-db-ts`: Vector database
+- `openai`: OpenAI API client
 
 ### Caching
 - `ioredis`: Redis client
@@ -236,6 +262,32 @@ TypeScript path mappings for clean imports:
 | Seeder | `*.seeder.ts` | `app-config.seeder.ts` |
 | Utility | `*.util.ts` | `hardware.util.ts` |
 
+## RAG Module Details
+
+### Configuration
+- **Vector Database**: Datastax Astra DB
+- **Embeddings**: OpenAI text-embedding-ada-002 (1536 dimensions)
+- **Collection**: Configurable via `ASTRA_DB_COLLECTION` env var
+- **Similarity**: Cosine similarity for document matching
+
+### Service Methods
+```typescript
+class RAGService {
+  // OnModuleInit: Establish AstraDB connection
+  // OnModuleDestroy: Cleanup connections
+
+  async ingestDocument(dto: IngestDocumentDto): Promise<IngestResult[]>
+  async queryDocument(dto: QueryDocumentDto): Promise<QueryResult[]>
+  async deleteDocument(dto: DeleteDocumentDto): Promise<DeleteResult[]>
+  async healthCheck(): Promise<HealthStatus>
+}
+```
+
+### DTOs
+- **IngestDocumentDto**: Multi-document ingestion with metadata
+- **QueryDocumentDto**: Query with topK, score threshold, and filters
+- **DeleteDocumentDto**: Conditional deletion by IDs or filter
+
 ## Testing Structure
 
 ```
@@ -246,10 +298,10 @@ test/
 ```
 
 **Testing Commands**:
-- `npm run test` - Unit tests
-- `npm run test:watch` - Watch mode
-- `npm run test:cov` - Coverage report
-- `npm run test:e2e` - End-to-end tests
+- `pnpm run test` - Unit tests
+- `pnpm run test:watch` - Watch mode
+- `pnpm run test:cov` - Coverage report
+- `pnpm run test:e2e` - End-to-end tests
 
 ## Build & Deployment Artifacts
 
@@ -273,10 +325,29 @@ Running Container
 - `package.json` - Dependencies and scripts
 - `pnpm-lock.yaml` - Locked dependencies
 
+## Recent Updates
+
+### Phase 2 Implementation Complete ✅
+- RAG module with full implementation
+- LangChain + AstraDB + OpenAI integration
+- Document ingestion, query, and delete operations
+- Vector similarity search with cosine metric
+- Lifecycle hooks for database connection management
+
+### Phase 1 Foundation Complete ✅
+- Multi-database support (MongoDB/PostgreSQL)
+- Redis caching layer
+- JWT authentication
+- SIWE blockchain authentication
+- Base CRUD patterns
+- Swagger documentation
+- Docker containerization
+
 ## Unresolved Questions
 
-1. Where is the actual RAG implementation code? (Only dependencies present)
-2. Are there scheduled jobs/cron tasks? (No evidence in scout report)
-3. What is the migration strategy for database schema changes?
-4. How are environment-specific configs handled beyond .env?
-5. Is there a rate limiting implementation?
+1. Is scheduled processing needed for large document batches?
+2. How to handle document versioning in RAG system?
+3. What is the strategy for data migration when switching between vector databases?
+4. Should we implement document preprocessing (chunking, cleaning)?
+5. How to handle rate limiting on OpenAI API calls?
+6. What are the backup/restore strategies for vector data?

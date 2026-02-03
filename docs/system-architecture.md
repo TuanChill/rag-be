@@ -150,8 +150,85 @@ UserController.getCurrentUser(@CurrentUser() user)
       └─► Returns sanitized user object
 ```
 
-### 4. RAG Query Flow
+### 4. RAG Service Layer (Phase 3 Implementation)
 
+#### Service Architecture Pattern
+```
+RagModule
+  │
+  ├─► RagService implements OnModuleInit/Destroy
+  │   ├─► Connection Management (AstraDB/Embeddings)
+  │   ├─► Lifecycle Management (initialize/cleanup)
+  │   ├─► Error Handling (try/catch with specific exceptions)
+  │   └─► Health Check (lightweight validation)
+  │
+  └─► RagController
+        ├─► Document Ingest (ingestDocuments)
+        ├─► Similarity Search (queryDocuments)
+        ├─► Document Deletion (deleteDocuments)
+        └─► Health Endpoint (healthCheck)
+```
+
+#### RAG Service Implementation Patterns
+
+**1. Initialization Pattern**:
+```typescript
+@Injectable()
+export class RagService implements OnModuleDestroy {
+  private vectorStore: AstraDBVectorStore | null = null;
+  private embeddings: OpenAIEmbeddings | null = null;
+  private isInitialized = false;
+
+  async initialize(): Promise<void> {
+    // Initialize vector store and embeddings
+    // Validate required configuration
+    // Set initialization flag
+  }
+}
+```
+
+**2. Document Ingestion**:
+```typescript
+async ingestDocuments(documents: IngestDocument[]): Promise<IngestResult> {
+  this.ensureInitialized();
+
+  // Convert to LangChain Document format
+  // Add metadata with timestamp
+  // Return ingestion results with IDs
+}
+```
+
+**3. Vector Store Integration**:
+- **Connection**: Uses `AstraDBVectorStore.fromExistingIndex()`
+- **Configuration**: Environment-based settings:
+  - `astradb.token` - AstraDB authentication
+  - `astradb.endpoint` - Database endpoint
+  - `astradb.collection` - Vector collection name
+  - `openai.apiKey` - OpenAI API key
+  - `openai.embeddingModel` - Embedding model (default: text-embedding-ada-002)
+- **Vector Dimensions**: 1536 (OpenAI embeddings)
+- **Similarity Metric**: Cosine distance
+
+**4. Health Check Strategy (Lightweight)**:
+```typescript
+async healthCheck(): Promise<RagHealthStatus> {
+  // Check initialization status
+  // Avoid expensive operations (e.g., similaritySearch)
+  // Sanitize error messages for production
+  // Return collection status and timestamp
+}
+```
+
+**5. Resource Cleanup**:
+```typescript
+async onModuleDestroy(): Promise<void> {
+  // Clear vector store reference
+  // Clear embeddings reference
+  // Reset initialization flag
+}
+```
+
+#### Query Flow (Updated)
 ```
 Client
   │
@@ -159,33 +236,21 @@ Client
   ▼
 QueryDocumentDto (Validation)
   │
-  ├─► @IsNotEmpty() query: string
-  ├─► @MaxLength(1000) query validation
-  ├─► @Min(1) @Max(100) topK validation
-  └─► @ValidateNested() filter validation
+  ├─► @IsNotEmpty() @MaxLength(1000) query: string
+  ├─► @Min(1) @Max(100) topK: number (default: 5)
+  ├─► @IsOptional() scoreThreshold: number (0-1)
+  └─► @ValidateNested() filter?: DocumentFilterDto
   ▼
 RagController
   ▼
-RagService
+RagService (initialized with lifecycle management)
   │
-  ├─► OpenAI Embeddings API
-  │   └─► text-embedding-ada-002(query)
-  │       └─► Returns vector [0.123, 0.456, ...]
+  ├─► ensureInitialized() - Validate service ready
+  ├─► OpenAI Embeddings (1536-dim vector)
+  ├─► AstraDB similaritySearchWithScore()
+  │   └─► Returns documents with relevance scores
   │
-  ├─► Datastax Astra DB Vector Search
-  │   └─► findSimilarVectors(vector, topK, filter)
-  │       └─► Returns top K matching documents
-  │
-  ├─► LangChain Context Assembly
-  │   └─► Combine retrieved docs + query
-  │
-  ├─► OpenAI GPT API
-  │   └─► chat.completions.create({
-  │         model: "gpt-4",
-  │         messages: [context + query]
-  │       })
-  │
-  └─► Returns QueryResult[] with metadata
+  └─► Returns QueryResult[] with sanitized output
 ```
 
 ## Database Architecture
@@ -401,9 +466,15 @@ app.enableCors({
 - RAG Configuration:
   - `ASTRA_DB_ENDPOINT` - Datastax Astra database endpoint
   - `ASTRA_DB_APPLICATION_TOKEN` - Authentication token for Astra
-  - `ASTRA_DB_COLLECTION` - Collection name (default: 'documents')
+  - `ASTRA_DB_COLLECTION` - Collection name for vector documents (default: 'documents')
   - `OPENAI_API_KEY` - OpenAI API key for embeddings
-  - `OPENAI_EMBEDDING_MODEL` - Model name (default: 'text-embedding-ada-002')
+  - `OPENAI_EMBEDDING_MODEL` - Embedding model name (default: 'text-embedding-ada-002')
+
+**Vector Database Details**:
+  - Embedding dimensions: 1536 (OpenAI text-embedding-ada-002)
+  - Similarity metric: Cosine distance
+  - Index type: HNSW (Hierarchical Navigable Small World)
+  - Batch operations: Supported for ingestion/deletion
 
 ## Scalability Considerations
 
@@ -467,6 +538,137 @@ Client ──► LB                     ├──► MongoDB
   "stack": "Error: Connection timeout..."
 }
 ```
+
+## Vector Store Integration Architecture
+
+### Astra DB Vector Store Configuration
+
+**Initialization Parameters**:
+```typescript
+this.vectorStore = await AstraDBVectorStore.fromExistingIndex(
+  this.embeddings,
+  {
+    token: astraToken,
+    endpoint: astraEndpoint,
+    collection: collectionName,
+    collectionOptions: {
+      vector: {
+        dimension: 1536,          // OpenAI embedding dimensions
+        metric: 'cosine',         // Similarity metric
+      },
+    },
+  },
+);
+```
+
+**Vector Operations**:
+1. **Document Ingestion**:
+   - Convert to LangChain Document format
+   - Add metadata with timestamps
+   - Batch processing for efficiency
+
+2. **Similarity Search**:
+   - `similaritySearchWithScore(query, topK, filter)`
+   - Returns documents with relevance scores
+   - Supports metadata filtering
+
+3. **Document Deletion**:
+   - Delete by specific IDs
+   - Delete by metadata filters
+   - Batch deletion support
+
+**Performance Considerations**:
+- Connection pooling through MikroORM
+- Lazy loading for large document sets
+- Caching for repeated queries
+- Index optimization for vector search
+
+### LangChain Integration
+
+**Document Processing Pipeline**:
+```typescript
+const langchainDocs = documents.map(
+  (doc) =>
+    new Document({
+      pageContent: doc.pageContent,
+      metadata: {
+        ...doc.metadata,
+        createdAt: new Date().toISOString(), // Auto-timestamp
+      },
+    }),
+);
+```
+
+**Embedding Configuration**:
+```typescript
+this.embeddings = new OpenAIEmbeddings({
+  openAIApiKey: openaiApiKey,
+  modelName: embeddingModel || 'text-embedding-ada-002',
+});
+```
+
+## Security Enhancements (Phase 3)
+
+### Error Handling Improvements
+
+**1. Error Sanitization**:
+```typescript
+// Production: Generic error messages
+return {
+  status: 'unhealthy',
+  error: 'Service unavailable', // No internal details
+};
+
+// Development: Detailed error messages
+return {
+  status: 'unhealthy',
+  error: error instanceof Error ? error.message : 'Unknown error',
+};
+```
+
+**2. Exception Handling**:
+```typescript
+try {
+  // RAG operation
+} catch (error) {
+  this.logger.error('Operation failed', error);
+  if (error instanceof BadRequestException) {
+    throw error; // Re-throw known exceptions
+  }
+  throw new InternalServerErrorException('Operation failed');
+}
+```
+
+**3. Input Validation**:
+```typescript
+// DTO validation with class-validator
+@IsNotEmpty()
+@MaxLength(1000)
+query: string;
+
+@Min(1)
+@Max(100)
+topK: number;
+```
+
+### Logging Strategy
+
+**1. Structured Logging**:
+```typescript
+this.logger.log(`Ingesting documents`);
+this.logger.log(`Found ${queryResults.length} matching documents`);
+this.logger.error('Failed to ingest documents', error);
+```
+
+**2. Log Sanitization**:
+- No sensitive data in logs
+- Generic error messages in production
+- Detailed debugging in development
+
+**3. Performance Monitoring**:
+- Request/response timing
+- Memory usage tracking
+- Error rate metrics
 
 ## Unresolved Architecture Questions
 

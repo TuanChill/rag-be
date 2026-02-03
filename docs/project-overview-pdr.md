@@ -27,9 +27,12 @@ Enterprise-grade backend service combining traditional web2 authentication with 
 - **Transactions**: Built-in transactional write operations
 
 ### 3. RAG Infrastructure
-- **Vector Database**: Datastax Astra integration
-- **LangChain**: OpenAI + community integrations
-- **Document Processing**: Embedded in RAG pipeline
+- **Vector Database**: Datastax Astra DB with 1536-dim embeddings
+- **LangChain**: Complete orchestration pipeline
+- **Document Processing**: Ingest, query, delete with filtering
+- **Vector Operations**: Cosine similarity search with scoring
+- **Lifecycle Management**: OnModuleInit/Destroy hooks
+- **Health Monitoring**: Real-time system status endpoints
 
 ### 4. Developer Experience
 - **API Documentation**: Auto-generated Swagger/OpenAPI
@@ -60,10 +63,13 @@ Enterprise-grade backend service combining traditional web2 authentication with 
 - Runtime configuration retrieval
 
 #### FR4: RAG Operations
-- Vector-based document retrieval
+- Vector-based document retrieval with similarity search
 - LangChain orchestration for LLM interactions
-- Astra DB vector similarity search
+- Astra DB vector similarity search (cosine metric, 1536 dimensions)
 - Context augmentation for responses
+- Document ingestion, query, and deletion operations
+- Metadata filtering and score thresholding
+- Health check and monitoring endpoints
 
 ### Non-Functional Requirements
 
@@ -151,12 +157,15 @@ Enterprise-grade backend service combining traditional web2 authentication with 
 - ✅ Swagger documentation
 - ✅ Docker containerization
 
-### Phase 2: RAG Integration (In Progress)
-- 🔄 LangChain pipeline setup
-- 🔄 Datastax Astra vector store
-- 🔄 Document ingestion endpoints
-- 🔄 Query/retrieval endpoints
-- 🔄 Context window management
+### Phase 2: RAG Integration (Complete ✅)
+- ✅ LangChain pipeline setup
+- ✅ Datastax Astra vector store
+- ✅ Document ingestion endpoints
+- ✅ Query/retrieval endpoints
+- ✅ Context window management
+- ✅ Vector similarity search
+- ✅ Lifecycle hooks for database management
+- ✅ Comprehensive DTOs with validation
 
 ### Phase 3: Production Hardening (Planned)
 - ⏳ Rate limiting and throttling

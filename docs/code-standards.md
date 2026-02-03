@@ -61,20 +61,29 @@ feature-name/
     └── feature.guard.ts        # Authorization logic
 ```
 
-### RAG Module Example (Phase 2 Implementation)
+### RAG Module Implementation
 ```
 rag/
 ├── rag.module.ts               # ConfigModule import, lifecycle hooks
 ├── rag.controller.ts           # REST endpoints with @ApiTags
-├── rag.service.ts              # Vector DB + LLM integration
+├── rag.service.ts              # LangChain + AstraDB + OpenAI integration
+├── entities/
+│   └── document.entity.ts     # Document metadata structure
 ├── dto/
 │   ├── index.ts                # Central export
-│   ├── ingest-document.dto.ts  # Multi-document ingestion
-│   ├── query-document.dto.ts   # Query with filters
-│   └── delete-document.dto.ts  # Conditional deletion
+│   ├── ingest-document.dto.ts  # Multi-document ingestion with validation
+│   ├── query-document.dto.ts   # Query with filters, topK, scoreThreshold
+│   └── delete-document.dto.ts  # Conditional deletion by IDs/filter
 └── types/
-    └── rag.types.ts            # IngestResult, QueryResult, etc.
+    └── rag.types.ts            # Result types, metadata interfaces
 ```
+
+**Key Implementation Details**:
+- Lifecycle hooks: `@OnModuleInit()` and `@OnModuleDestroy()` for AstraDB connection
+- Vector operations: 1536-dim embeddings from OpenAI text-embedding-ada-002
+- Similarity metric: Cosine distance for document matching
+- Batch operations: Support for multiple document ingestion/deletion
+- Health monitoring: Real-time system status endpoint
 
 ### Module Template
 ```typescript
@@ -330,6 +339,58 @@ export class QueryDocumentDto {
   @Min(1)
   @Max(100)
   topK?: number = 5;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  scoreThreshold?: number = 0.7;
+}
+```
+
+**Vector Operations Validation**:
+```typescript
+import { IsArray, IsNotEmpty, MaxLength } from 'class-validator';
+
+export class IngestDocumentDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DocumentDto)
+  documents: DocumentDto[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  collection?: string = 'documents';
+}
+
+class DocumentDto {
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(100000, { message: 'Document content exceeds 100KB limit' })
+  pageContent: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DocumentMetadataDto)
+  metadata?: DocumentMetadataDto;
+}
+
+class DocumentMetadataDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  title?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  version?: number;
 }
 ```
 
