@@ -28,6 +28,7 @@ import { ReportService } from './services/report.service';
 import { StartAnalysisDto } from './dto/start-analysis.dto';
 import { ListAnalysisDto } from './dto/list-analysis.dto';
 import { AnalysisResponseDto } from './dto/analysis-response.dto';
+import { UIAnalysisResultDto } from './dto/ui-analysis-response.dto';
 import { AnalysisStatusDto } from './dto/analysis-status.dto';
 import { CreateReportDto } from './dto/create-report.dto';
 import { ReportResponseDto } from './dto/report-response.dto';
@@ -134,20 +135,20 @@ export class AnalysisController {
   @ApiResponse({
     status: 200,
     description: 'Analysis result for the specified deck',
-    type: AnalysisResponseDto,
+    type: UIAnalysisResultDto,
   })
   @ApiResponse({ status: 404, description: 'Analysis or deck not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getAnalysisByDeck(
     @Param('deckUuid') deckUuid: string,
     @Request() req: { user: { sub: string } },
-  ): Promise<AnalysisResponseDto> {
+  ): Promise<UIAnalysisResultDto> {
     const ownerId = req.user.sub;
     const analysis = await this.analysisService.getAnalysisByDeck(
       deckUuid,
       ownerId,
     );
-    return AnalysisResponseDto.fromEntity(analysis);
+    return UIAnalysisResultDto.fromEntity(analysis);
   }
 
   @Delete(':uuid')

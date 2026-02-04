@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { AnalysisResult } from '../entities/analysis-result.entity';
+import { toUiDto } from '../utils/analysis-mapper.util';
 
 /**
  * VC Framework Category Types - matches frontend VCCategory
@@ -287,27 +288,10 @@ export class UIAnalysisResultDto {
 
   /**
    * Convert AnalysisResult entity to UI-compatible DTO
-   * Phase 02: Will implement full transformation logic
-   * Phase 03: Will include category mapping
+   * Phase 02: Uses analysis mapper utility for transformation
+   * Phase 03: Will include intelligent category mapping
    */
   static fromEntity(analysis: AnalysisResult): UIAnalysisResultDto {
-    // Placeholder implementation - to be enhanced in Phase 02
-    return {
-      deckId: analysis.deckUuid,
-      overallScore: analysis.overallScore ?? 0,
-      categoryScores: {
-        teamAndFounders: { score: 0, weight: 0.142 },
-        marketSize: { score: 0, weight: 0.142 },
-        productSolution: { score: 0, weight: 0.142 },
-        traction: { score: 0, weight: 0.142 },
-        businessModel: { score: 0, weight: 0.142 },
-        competition: { score: 0, weight: 0.142 },
-        financials: { score: 0, weight: 0.142 },
-      },
-      strengths: [],
-      improvements: [],
-      analyzedAt:
-        analysis.completedAt?.toISOString() ?? new Date().toISOString(),
-    };
+    return toUiDto(analysis);
   }
 }
