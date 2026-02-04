@@ -4,7 +4,7 @@
  *
  * Event hooks for analysis job queue processing
  */
-import { OnQueueActive, OnQueueCompleted, OnQueueFailed } from '@nestjs/bull';
+import { OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 
@@ -18,19 +18,19 @@ export interface AnalysisJobData {
 export class AnalysisQueueConsumer {
   private readonly logger = new Logger(AnalysisQueueConsumer.name);
 
-  @OnQueueActive()
+  @OnWorkerEvent('active')
   onActive(job: Job<AnalysisJobData>) {
     const jobId = job.id ?? 'unknown';
     this.logger.log(`Job ${jobId} started for deck: ${job.data.deckId}`);
   }
 
-  @OnQueueCompleted()
+  @OnWorkerEvent('completed')
   onCompleted(job: Job<AnalysisJobData>) {
     const jobId = job.id ?? 'unknown';
     this.logger.log(`Job ${jobId} completed for deck: ${job.data.deckId}`);
   }
 
-  @OnQueueFailed()
+  @OnWorkerEvent('failed')
   onFailed(job: Job<AnalysisJobData>, error: Error) {
     const jobId = job.id ?? 'unknown';
     this.logger.error(

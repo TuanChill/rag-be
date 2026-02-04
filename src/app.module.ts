@@ -21,11 +21,10 @@ import { redisStore } from 'cache-manager-redis-store';
 import { AppConfigModule } from './api/app-config/app-config.module';
 import { SeederModule } from '@core/database/seeder/seeder.module';
 import { EventsModule } from './core/events/events.module';
-import { QueueModule } from './core/queue/queue.module';
-import { AnalysisModule } from './api/analysis/analysis.module';
 import { AgentsModule } from './core/agents/agents.module';
 import { ScoringModule } from './agents/scoring/scoring.module';
 import { AnalysisModule as AnalysisAgentsModule } from './agents/analysis/analysis.module';
+import { ProcessorsModule } from './core/queue/processors.module';
 
 @Module({
   imports: [
@@ -39,7 +38,7 @@ import { AnalysisModule as AnalysisAgentsModule } from './agents/analysis/analys
     AuthModule,
     RagModule,
     PitchDeckModule,
-    AnalysisModule,
+    // AnalysisModule is imported via ProcessorsModule to avoid Bull double registration
     AgentsModule,
     ScoringModule,
     AnalysisAgentsModule,
@@ -77,7 +76,7 @@ import { AnalysisModule as AnalysisAgentsModule } from './agents/analysis/analys
     }),
     AppConfigModule,
     EventsModule,
-    QueueModule,
+    ProcessorsModule,
     // import redis module here for some case that cache module don't work
     // RedisModule.forRootAsync({
     //   imports: [ConfigModule],

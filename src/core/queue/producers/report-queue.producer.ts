@@ -1,28 +1,30 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue, JobState, JobProgress } from 'bullmq';
-import { AnalysisJobData } from '../interfaces/queue-job.interface';
+import { ReportJobData } from '../interfaces/report-job.interface';
 
 /**
- * Queue producer - adds jobs to the analysis queue
- * Called by controllers/services to trigger async analysis
+ * Queue producer - adds jobs to the report generation queue
+ * Called by services to trigger async report generation
  */
 @Injectable()
-export class AnalysisQueueProducer {
-  private readonly logger = new Logger(AnalysisQueueProducer.name);
+export class ReportQueueProducer {
+  private readonly logger = new Logger(ReportQueueProducer.name);
 
-  constructor(@InjectQueue('analysis') private readonly analysisQueue: Queue) {}
+  constructor(
+    @InjectQueue('report-generation') private readonly reportQueue: Queue,
+  ) {}
 
   /**
-   * Add analysis job to queue
-   * @param jobData Job data containing deckId, ownerId, and type
+   * Add report generation job to queue
+   * @param jobData Job data containing reportUuid, analysisUuid, ownerId, reportType, and format
    * @returns Job ID for tracking
    */
-  async addAnalysisJob(jobData: AnalysisJobData): Promise<string> {
-    // Include timestamp to allow re-analysis of same deck
-    const jobId = `${jobData.deckId}-${jobData.type}-${Date.now()}`;
+  async addReportJob(jobData: ReportJobData): Promise<string> {
+    // Include timestamp to allow regeneration of same report
+    const jobId = `${jobData.reportUuid}-${Date.now()}`;
 
-    const job = await this.analysisQueue.add('analyze-deck', jobData, {
+    const job = await this.reportQueue.add('generate-report', jobData, {
       jobId,
       priority: jobData.priority || 5,
       delay: 0, // Process immediately
@@ -31,7 +33,7 @@ export class AnalysisQueueProducer {
     // Guard: job.id is always set by BullMQ after adding
     const addedJobId = job.id ?? jobId;
     this.logger.log(
-      `Analysis job queued: ${addedJobId} for deck: ${jobData.deckId}`,
+      `Report job queued: ${addedJobId} for analysis: ${jobData.analysisUuid}`,
     );
 
     return addedJobId;
@@ -44,7 +46,7 @@ export class AnalysisQueueProducer {
    */
   async getJobState(jobId: string): Promise<JobState | null> {
     try {
-      const job = await this.analysisQueue.getJob(jobId);
+      const job = await this.reportQueue.getJob(jobId);
       if (!job) return null;
 
       const state = await job.getState();
@@ -64,7 +66,7 @@ export class AnalysisQueueProducer {
     jobId: string,
   ): Promise<{ progress: JobProgress; data: unknown } | null> {
     try {
-      const job = await this.analysisQueue.getJob(jobId);
+      const job = await this.reportQueue.getJob(jobId);
       if (!job) return null;
 
       return { progress: job.progress, data: job.data };
@@ -80,7 +82,7 @@ export class AnalysisQueueProducer {
    */
   async removeJob(jobId: string): Promise<boolean> {
     try {
-      const job = await this.analysisQueue.getJob(jobId);
+      const job = await this.reportQueue.getJob(jobId);
       if (!job) return false;
 
       await job.remove();

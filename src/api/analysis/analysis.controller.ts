@@ -24,12 +24,16 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@core/guard/jwt.auth.guard';
 import { AnalysisService } from './services/analysis.service';
+import { ReportService } from './services/report.service';
 import { StartAnalysisDto } from './dto/start-analysis.dto';
 import { ListAnalysisDto } from './dto/list-analysis.dto';
 import { AnalysisResponseDto } from './dto/analysis-response.dto';
 import { AnalysisStatusDto } from './dto/analysis-status.dto';
+import { CreateReportDto } from './dto/create-report.dto';
+import { ReportResponseDto } from './dto/report-response.dto';
 import { AnalysisTransformInterceptor } from './interceptors/transform.interceptor';
 import { AnalysisRateLimitGuard } from './guards/rate-limit.guard';
+import { AnalysisReport } from './entities/analysis-report.entity';
 
 @ApiTags('analysis')
 @Controller('analysis')
@@ -37,7 +41,10 @@ import { AnalysisRateLimitGuard } from './guards/rate-limit.guard';
 @ApiBearerAuth()
 @UseInterceptors(AnalysisTransformInterceptor)
 export class AnalysisController {
-  constructor(private readonly analysisService: AnalysisService) {}
+  constructor(
+    private readonly analysisService: AnalysisService,
+    private readonly reportService: ReportService,
+  ) {}
 
   @Post('start')
   @ApiOperation({ summary: 'Start pitch deck analysis' })
@@ -158,5 +165,69 @@ export class AnalysisController {
     const ownerId = req.user.sub;
     await this.analysisService.deleteAnalysis(uuid, ownerId);
     return { success: true };
+  }
+
+  @Post(':uuid/reports')
+  @ApiOperation({ summary: 'Generate report for analysis' })
+  @ApiResponse({
+    status: 201,
+    description: 'Report generation started',
+    type: ReportResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 404, description: 'Analysis not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async generateReport(
+    @Param('uuid') uuid: string,
+    @Body() dto: CreateReportDto,
+    @Request() req: { user: { sub: string } },
+  ): Promise<ReportResponseDto> {
+    const ownerId = req.user.sub;
+    const report = await this.reportService.generateReport(uuid, ownerId, dto);
+    return this.mapReportToDto(report);
+  }
+
+  @Get(':uuid/reports')
+  @ApiOperation({ summary: 'Get all reports for analysis' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of reports',
+    type: [ReportResponseDto],
+  })
+  @ApiResponse({ status: 404, description: 'Analysis not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getReports(
+    @Param('uuid') uuid: string,
+    @Request() req: { user: { sub: string } },
+  ): Promise<ReportResponseDto[]> {
+    const ownerId = req.user.sub;
+    const reports = await this.reportService.getReportsByAnalysis(
+      uuid,
+      ownerId,
+    );
+    return reports.map((r) => this.mapReportToDto(r));
+  }
+
+  @Get(':uuid/reports/:reportId')
+  @ApiOperation({ summary: 'Get specific report' })
+  @ApiResponse({
+    status: 200,
+    description: 'Report details',
+    type: ReportResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Report not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getReport(
+    @Param('uuid') uuid: string,
+    @Param('reportId') reportId: string,
+    @Request() req: { user: { sub: string } },
+  ): Promise<ReportResponseDto> {
+    const ownerId = req.user.sub;
+    const report = await this.reportService.getReportByUuid(reportId, ownerId);
+    return this.mapReportToDto(report);
+  }
+
+  private mapReportToDto(report: AnalysisReport): ReportResponseDto {
+    return ReportResponseDto.fromEntity(report);
   }
 }

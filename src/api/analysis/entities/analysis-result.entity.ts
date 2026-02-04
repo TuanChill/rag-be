@@ -30,7 +30,10 @@ import { AnalysisRepository } from '../repositories/analysis.repository';
  * - has many AnalysisFinding
  * - has many AgentState
  */
-@Entity({ collection: 'analysis_results', repository: () => AnalysisRepository })
+@Entity({
+  collection: 'analysis_results',
+  repository: () => AnalysisRepository,
+})
 export class AnalysisResult extends BaseEntity {
   [EntityRepositoryType]?: AnalysisRepository;
 

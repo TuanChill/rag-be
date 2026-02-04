@@ -2,40 +2,65 @@
  * Analysis Job Processor
  * Phase 6: Orchestration Service
  *
- * Bull job processor for async analysis
- * Note: @nestjs/bull uses 'bull' at runtime but we use 'bullmq' types for consistency
+ * BullMQ job processor for async analysis
+ * Extends WorkerHost to process jobs from the analysis queue
  */
-import { Injectable, Logger } from '@nestjs/common';
-import { Process, Processor } from '@nestjs/bull';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  forwardRef,
+} from '@nestjs/common';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { OrchestratorService } from '../services/orchestrator.service';
 import { AnalysisJobData } from '@core/queue/interfaces/queue-job.interface';
 
 @Injectable()
 @Processor('analysis')
-export class AnalysisJobProcessor {
+export class AnalysisJobProcessor extends WorkerHost {
   private readonly logger = new Logger(AnalysisJobProcessor.name);
 
-  constructor(private readonly orchestrator: OrchestratorService) {}
+  constructor(
+    @Inject(forwardRef(() => OrchestratorService))
+    private readonly orchestrator: OrchestratorService,
+  ) {
+    super();
+  }
 
-  @Process('analyze-deck')
-  async handleAnalysis(job: Job<AnalysisJobData>): Promise<void> {
+  async process(job: Job<AnalysisJobData>): Promise<void> {
     const { deckId, ownerId } = job.data;
 
     this.logger.log(`Processing analysis job: ${job.id}`);
 
     try {
-      // @nestjs/bull uses 'bull' package which has progress() instead of updateProgress()
-      await (job as any).progress(10);
+      await job.updateProgress(10);
 
       await this.orchestrator.executeAnalysis(deckId, ownerId, deckId);
 
-      await (job as any).progress(100);
+      await job.updateProgress(100);
 
       this.logger.log(`Analysis job completed: ${job.id}`);
     } catch (error) {
       this.logger.error(`Analysis job failed: ${job.id}`, error);
       throw error;
     }
+  }
+
+  @OnWorkerEvent('active')
+  onActive(job: Job) {
+    this.logger.log(`Analysis job ${job.id} started for deck: ${job.data.deckId}`);
+  }
+
+  @OnWorkerEvent('completed')
+  onCompleted(job: Job) {
+    this.logger.log(`Analysis job ${job.id} completed for deck: ${job.data.deckId}`);
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job, error: Error) {
+    this.logger.error(
+      `Analysis job ${job.id} failed for deck: ${job.data.deckId} - ${error.message}`,
+    );
   }
 }

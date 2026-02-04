@@ -4,6 +4,8 @@
  * Phase 7: API Endpoints - Added controller, guard, interceptor
  *
  * Orchestrates all agents for pitch deck analysis
+ * Note: Processors are registered in ProcessorsModule to avoid double registration
+ * Note: ReportAgentModule is NOT imported here to avoid circular dependency
  */
 import { Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
@@ -16,12 +18,13 @@ import { AnalysisResult } from './entities/analysis-result.entity';
 import { AnalysisScore } from './entities/analysis-score.entity';
 import { AnalysisFinding } from './entities/analysis-finding.entity';
 import { AgentState } from './entities/agent-state.entity';
+import { AnalysisReport } from './entities/analysis-report.entity';
 import { PitchDeck } from '@api/pitchdeck/entities/pitch-deck.entity';
 import { AnalysisService } from './services/analysis.service';
 import { OrchestratorService } from './services/orchestrator.service';
 import { CalculatorService } from './services/calculator.service';
+import { ReportService } from './services/report.service';
 import { AnalysisRepository } from './repositories/analysis.repository';
-import { AnalysisJobProcessor } from './queue/analysis-job.processor';
 import { AnalysisController } from './analysis.controller';
 import { AnalysisTransformInterceptor } from './interceptors/transform.interceptor';
 import { AnalysisRateLimitGuard } from './guards/rate-limit.guard';
@@ -33,6 +36,7 @@ import { AnalysisRateLimitGuard } from './guards/rate-limit.guard';
       AnalysisScore,
       AnalysisFinding,
       AgentState,
+      AnalysisReport,
       PitchDeck,
     ]),
     EventsModule,
@@ -46,11 +50,11 @@ import { AnalysisRateLimitGuard } from './guards/rate-limit.guard';
     AnalysisService,
     OrchestratorService,
     CalculatorService,
+    ReportService,
     AnalysisRepository,
-    AnalysisJobProcessor,
     AnalysisTransformInterceptor,
     AnalysisRateLimitGuard,
   ],
-  exports: [AnalysisService, AnalysisJobProcessor],
+  exports: [AnalysisService, OrchestratorService, ReportService],
 })
 export class AnalysisModule {}
