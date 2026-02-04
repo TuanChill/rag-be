@@ -7,6 +7,7 @@ import {
   OneToMany,
   Collection,
   Index,
+  EntityRepositoryType,
 } from '@mikro-orm/core';
 import { ObjectId } from '@mikro-orm/mongodb';
 import { BaseEntity } from '@core/base/base.entity';
@@ -16,6 +17,7 @@ import { AnalysisScore } from './analysis-score.entity';
 import { AnalysisFinding } from './analysis-finding.entity';
 import { AgentState } from './agent-state.entity';
 import { AnalysisStatus } from '../types/analysis.types';
+import { AnalysisRepository } from '../repositories/analysis.repository';
 
 /**
  * Main analysis result entity
@@ -28,8 +30,10 @@ import { AnalysisStatus } from '../types/analysis.types';
  * - has many AnalysisFinding
  * - has many AgentState
  */
-@Entity({ collection: 'analysis_results' })
+@Entity({ collection: 'analysis_results', repository: () => AnalysisRepository })
 export class AnalysisResult extends BaseEntity {
+  [EntityRepositoryType]?: AnalysisRepository;
+
   @PrimaryKey()
   _id!: ObjectId;
 

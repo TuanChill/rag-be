@@ -4,10 +4,11 @@
  *
  * Custom repository for AnalysisResult queries
  */
-import { EntityRepository } from '@mikro-orm/core';
+import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { ObjectId } from '@mikro-orm/mongodb';
 import { AnalysisResult } from '../entities/analysis-result.entity';
 import { AnalysisStatus } from '../types/analysis.types';
+import { PitchDeck } from '@api/pitchdeck/entities/pitch-deck.entity';
 
 export class AnalysisRepository extends EntityRepository<AnalysisResult> {
   /**
@@ -17,6 +18,30 @@ export class AnalysisRepository extends EntityRepository<AnalysisResult> {
     return this.findOne(
       { deck: deckId },
       { populate: ['scores', 'findings', 'agentStates'] },
+    );
+  }
+
+  /**
+   * Find most recent analysis result by deck UUID
+   * Searches by deck.uuid field (not deck._id ObjectId)
+   */
+  async findByDeckUuid(
+    em: EntityManager,
+    deckUuid: string,
+  ): Promise<AnalysisResult | null> {
+    // First find the deck by UUID to get its _id
+    const deck = await em.findOne(PitchDeck, { uuid: deckUuid });
+    if (!deck) {
+      return null;
+    }
+
+    // Find the most recent analysis for this deck
+    return this.findOne(
+      { deck: deck._id },
+      {
+        populate: ['scores', 'findings', 'agentStates'],
+        orderBy: { createdAt: 'desc' },
+      },
     );
   }
 

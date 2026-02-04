@@ -122,6 +122,27 @@ export class AnalysisController {
     return analyses.map((a) => AnalysisResponseDto.fromEntity(a));
   }
 
+  @Get('by-deck/:deckUuid')
+  @ApiOperation({ summary: 'Get analysis by pitch deck UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Analysis result for the specified deck',
+    type: AnalysisResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Analysis or deck not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getAnalysisByDeck(
+    @Param('deckUuid') deckUuid: string,
+    @Request() req: { user: { sub: string } },
+  ): Promise<AnalysisResponseDto> {
+    const ownerId = req.user.sub;
+    const analysis = await this.analysisService.getAnalysisByDeck(
+      deckUuid,
+      ownerId,
+    );
+    return AnalysisResponseDto.fromEntity(analysis);
+  }
+
   @Delete(':uuid')
   @ApiOperation({ summary: 'Cancel or delete analysis' })
   @ApiResponse({

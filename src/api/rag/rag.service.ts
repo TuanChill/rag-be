@@ -212,6 +212,59 @@ export class RagService implements OnModuleDestroy {
   }
 
   /**
+   * Delete documents by metadata filter (e.g., deckUuid)
+   * Uses underlying AstraDB collection for filter-based deletion
+   *
+   * Note: AstraDBVectorStore stores metadata at document root level,
+   * not nested under "metadata" key.
+   */
+  async deleteDocumentsByFilter(
+    filter: Record<string, unknown>,
+  ): Promise<DeleteResult> {
+    this.ensureInitialized();
+
+    try {
+      this.logger.log(
+        `Deleting documents by filter: ${JSON.stringify(filter)}`,
+      );
+
+      // Access AstraDB collection directly (private property)
+      // @ts-ignore - Access private collection property
+      const collection = (this.vectorStore as any).collection;
+
+      if (!collection) {
+        throw new InternalServerErrorException(
+          'AstraDB collection not available',
+        );
+      }
+
+      // Build filter object - metadata stored at ROOT level, not nested
+      const filterObj: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(filter)) {
+        filterObj[key] = value; // Direct key, no "metadata." prefix
+      }
+
+      // Delete documents matching the filter
+      const result = await collection.deleteMany(filterObj);
+
+      this.logger.log(`Deleted ${result.deletedCount} documents by filter`);
+
+      return {
+        success: true,
+        deletedCount: result.deletedCount || 0,
+      };
+    } catch (error) {
+      this.logger.error('Failed to delete documents by filter', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Failed to delete documents by filter',
+      );
+    }
+  }
+
+  /**
    * Health check for the RAG service
    */
   async healthCheck(): Promise<RagHealthStatus> {

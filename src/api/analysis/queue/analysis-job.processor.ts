@@ -2,7 +2,8 @@
  * Analysis Job Processor
  * Phase 6: Orchestration Service
  *
- * BullMQ job processor for async analysis
+ * Bull job processor for async analysis
+ * Note: @nestjs/bull uses 'bull' at runtime but we use 'bullmq' types for consistency
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { Process, Processor } from '@nestjs/bull';
@@ -24,11 +25,12 @@ export class AnalysisJobProcessor {
     this.logger.log(`Processing analysis job: ${job.id}`);
 
     try {
-      await job.updateProgress(10);
+      // @nestjs/bull uses 'bull' package which has progress() instead of updateProgress()
+      await (job as any).progress(10);
 
       await this.orchestrator.executeAnalysis(deckId, ownerId, deckId);
 
-      await job.updateProgress(100);
+      await (job as any).progress(100);
 
       this.logger.log(`Analysis job completed: ${job.id}`);
     } catch (error) {

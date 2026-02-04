@@ -63,4 +63,10 @@ export default () => ({
     timeoutMs: parseInt(process.env.AGENT_TIMEOUT_MS) || 300000,
     temperature: parseFloat(process.env.AGENT_TEMPERATURE) || 0.7,
   },
+  // Vision extraction config for image-only PDFs
+  vision: {
+    enabled: process.env.VISION_EXTRACTION_ENABLED === 'true',
+    model: process.env.VISION_MODEL || 'gpt-4o',
+    maxTokens: parseInt(process.env.VISION_MAX_TOKENS) || 4096,
+  },
 });

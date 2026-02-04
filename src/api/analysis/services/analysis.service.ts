@@ -137,6 +137,30 @@ export class AnalysisService {
     return analysis;
   }
 
+  async getAnalysisByDeck(deckUuid: string, ownerId: string) {
+    // Find deck by UUID and verify ownership
+    const deck = await this.pitchDeckRepository.findOne({
+      uuid: deckUuid,
+      owner: new ObjectId(ownerId),
+    });
+
+    if (!deck) {
+      throw new NotFoundException('Pitch deck not found');
+    }
+
+    // Get most recent analysis for this deck
+    const analysis = await this.analysisRepository.findByDeckUuid(
+      this.em,
+      deckUuid,
+    );
+
+    if (!analysis) {
+      throw new NotFoundException('Analysis not found for this deck');
+    }
+
+    return analysis;
+  }
+
   private calculateProgress(analysis: AnalysisResult): number {
     if (analysis.status === 'completed') return 100;
     if (analysis.status === 'pending') return 0;

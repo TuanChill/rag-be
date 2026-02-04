@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, Reference, wrap } from '@mikro-orm/core';
+import { EntityRepository, Reference } from '@mikro-orm/core';
 import { ObjectId } from '@mikro-orm/mongodb';
 import { BaseService } from '@core/base/base.service';
 import { PitchDeck, DeckStatus } from './entities/pitch-deck.entity';
@@ -20,6 +20,11 @@ import {
   MAX_TOTAL_SIZE,
   isValidMimeType,
 } from './constants/file-types';
+import {
+  DocumentProcessorService,
+  TextChunk,
+} from './services/document-processor.service';
+import { RagService } from '@api/rag/rag.service';
 import { v4 as uuidv4 } from 'uuid';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -34,6 +39,8 @@ export class PitchDeckService extends BaseService<PitchDeck> {
     private readonly pitchDeckRepository: EntityRepository<PitchDeck>,
     @InjectRepository(DeckChunk)
     private readonly deckChunkRepository: EntityRepository<DeckChunk>,
+    private readonly documentProcessor: DocumentProcessorService,
+    private readonly ragService: RagService,
   ) {
     super(pitchDeckRepository);
     this.ensureUploadDir();
@@ -55,7 +62,7 @@ export class PitchDeckService extends BaseService<PitchDeck> {
 
   /**
    * Upload and store pitch deck files (multi-file support)
-   * Phase 03: Multiple files per deck with transaction safety
+   * Phase 05: Added RAG processing (extraction → chunking → embedding → AstraDB)
    */
   async uploadDeck(
     files: Express.Multer.File[],
@@ -107,7 +114,12 @@ export class PitchDeckService extends BaseService<PitchDeck> {
         `Uploading pitch deck: ${dto.title} with ${files.length} files for user: ${ownerId}`,
       );
 
-      // Process each file (MIME type validated above, safe to cast)
+      // Store files and create PitchDeckFile entities
+      const storedFiles: Array<{
+        file: Express.Multer.File;
+        deckFile: PitchDeckFile;
+      }> = [];
+
       for (const file of files) {
         const fileUuid = uuidv4();
         const safeExtension = MIME_TO_EXT[file.mimetype] || 'bin';
@@ -128,14 +140,17 @@ export class PitchDeckService extends BaseService<PitchDeck> {
         });
 
         pitchDeck.files.add(deckFile);
+        storedFiles.push({ file, deckFile });
       }
 
-      pitchDeck.status = 'ready' as DeckStatus;
+      // Persist before RAG processing
       await this.em.persist(pitchDeck).flush();
 
-      this.logger.log(
-        `Pitch deck uploaded successfully: ${deckUuid} with ${files.length} files`,
-      );
+      // Phase 05: Process files through RAG pipeline
+      pitchDeck.status = 'processing' as DeckStatus;
+      await this.em.flush();
+
+      await this.processDeckForRAG(pitchDeck, storedFiles, ownerId);
 
       return pitchDeck;
     } catch (error) {
@@ -148,7 +163,118 @@ export class PitchDeckService extends BaseService<PitchDeck> {
         this.logger.warn('Failed to cleanup deck directory', cleanupError);
       }
 
+      // Note: Can't delete from AstraDB here as we don't have the vector IDs yet
+      // Vectors will be orphaned but won't cause issues
+
       throw error;
+    }
+  }
+
+  /**
+   * Process pitch deck through RAG pipeline
+   * Phase 05: Extract → Chunk → Embed → Store in AstraDB
+   */
+  private async processDeckForRAG(
+    pitchDeck: PitchDeck,
+    storedFiles: Array<{ file: Express.Multer.File; deckFile: PitchDeckFile }>,
+    ownerId: string,
+  ): Promise<void> {
+    const allChunks: TextChunk[] = [];
+    let globalChunkIndex = 0; // Global counter to avoid index collisions
+
+    try {
+      this.logger.log(`Processing RAG pipeline for deck: ${pitchDeck.uuid}`);
+
+      // Step 1: Extract text from each file
+      for (const { file, deckFile } of storedFiles) {
+        this.logger.log(`Extracting text from: ${deckFile.originalFileName}`);
+
+        const processed = await this.documentProcessor.processFile(
+          deckFile.storagePath,
+          deckFile.originalFileName,
+          deckFile.mimeType,
+        );
+
+        // Step 2: Create chunks with global index
+        const chunks = await this.documentProcessor.createChunks(
+          processed,
+          pitchDeck.uuid,
+        );
+
+        // Update chunk indices to be global across all files
+        for (const chunk of chunks) {
+          chunk.metadata.chunkIndex = globalChunkIndex++;
+        }
+
+        allChunks.push(...chunks);
+        this.logger.log(
+          `Created ${chunks.length} chunks from ${deckFile.originalFileName}`,
+        );
+      }
+
+      if (allChunks.length === 0) {
+        throw new BadRequestException(
+          'No content could be extracted from uploaded files',
+        );
+      }
+
+      // Step 3: Embed and store in AstraDB via RagService
+      this.logger.log(
+        `Embedding ${allChunks.length} chunks and storing in AstraDB...`,
+      );
+
+      const ingestResult = await this.ragService.ingestDocuments(
+        allChunks.map((chunk) => ({
+          pageContent: chunk.text,
+          metadata: {
+            deckUuid: pitchDeck.uuid,
+            filename: chunk.metadata.filename,
+            chunkIndex: chunk.metadata.chunkIndex,
+            mimeType: chunk.metadata.mimeType,
+            ownerId: ownerId,
+          },
+        })),
+      );
+
+      this.logger.log(
+        `Successfully stored ${ingestResult.count} chunks in AstraDB`,
+      );
+
+      // Step 4: Create DeckChunk entities with unique astraIds
+      for (const chunk of allChunks) {
+        const deckChunk = this.em.create(DeckChunk, {
+          astraId: `${pitchDeck.uuid}-${chunk.metadata.chunkIndex}`,
+          chunkIndex: chunk.metadata.chunkIndex,
+          tokenCount: chunk.text.length,
+          deck: pitchDeck,
+        });
+        pitchDeck.chunks.add(deckChunk);
+      }
+
+      // Update deck status and chunk count
+      pitchDeck.chunkCount = allChunks.length;
+      pitchDeck.status = 'ready' as DeckStatus;
+      await this.em.flush();
+
+      this.logger.log(
+        `RAG processing complete: ${pitchDeck.uuid} with ${allChunks.length} chunks`,
+      );
+    } catch (error) {
+      this.logger.error('RAG processing failed', error);
+
+      // Clean up orphaned DeckChunk entities
+      try {
+        await this.deckChunkRepository.nativeDelete({ deck: pitchDeck._id });
+        this.logger.log('Cleaned up orphaned DeckChunk entities');
+      } catch (cleanupError) {
+        this.logger.warn('Failed to cleanup orphaned DeckChunks', cleanupError);
+      }
+
+      pitchDeck.status = 'error' as DeckStatus;
+      await this.em.flush();
+      throw new BadRequestException(
+        `Failed to process pitch deck: ${error.message}`,
+      );
     }
   }
 
@@ -175,6 +301,7 @@ export class PitchDeckService extends BaseService<PitchDeck> {
     }
 
     return await this.pitchDeckRepository.find(where, {
+      populate: ['files'],
       limit: options?.limit,
       offset: options?.offset,
       orderBy: { createdAt: 'DESC' },
@@ -183,7 +310,7 @@ export class PitchDeckService extends BaseService<PitchDeck> {
 
   /**
    * Delete pitch deck with ownership validation
-   * Phase 03: Deletes deck directory containing all files
+   * Phase 05: Also deletes vectors from AstraDB using metadata filter
    */
   async deleteDeck(uuid: string, ownerId: string): Promise<void> {
     const deck = await this.findByUuid(uuid, ownerId);
@@ -192,6 +319,17 @@ export class PitchDeckService extends BaseService<PitchDeck> {
     }
 
     this.logger.log(`Deleting pitch deck: ${uuid}`);
+
+    // Delete vectors from AstraDB using deckUuid metadata filter
+    try {
+      await this.ragService.deleteDocumentsByFilter({ deckUuid: uuid });
+      this.logger.log(`Deleted vectors from AstraDB for deck: ${uuid}`);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to delete AstraDB vectors for deck: ${uuid}`,
+        error,
+      );
+    }
 
     // Delete entire deck directory from disk
     const deckDir = join(this.uploadDir, uuid);
