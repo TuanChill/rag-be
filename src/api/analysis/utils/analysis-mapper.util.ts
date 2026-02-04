@@ -1,7 +1,6 @@
 import { AnalysisResult } from '../entities/analysis-result.entity';
 import { AnalysisFinding } from '../entities/analysis-finding.entity';
 import { EntityDTO } from '@mikro-orm/core';
-import { AnalysisCategory } from '@agents/analysis/interfaces/category-analysis.interface';
 import {
   UIAnalysisResultDto,
   VCCategoryScoreMapDto,
@@ -13,11 +12,13 @@ import {
   ImpactLevel,
   SeverityLevel,
 } from '../dto/ui-analysis-response.dto';
+import { mapBackendToFrontend as mapCategoryWithDistribution } from './category-mapper.util';
 
 /**
  * Analysis Mapper Utility
  * Transforms AnalysisResult entity to UI-compatible DTO
  * Phase 02: Response Mapper
+ * Phase 03: Enhanced with intelligent category mapping
  */
 
 /** Default weight for each category (1/7 for equal weighting) */
@@ -27,27 +28,8 @@ const DEFAULT_CATEGORY_WEIGHT = 1 / 7;
 const DEFAULT_CATEGORY_SCORE = 0;
 
 /**
- * Map backend AnalysisCategory to frontend VCCategory
- * Phase 03 will refine this with intelligent mapping
- */
-function mapBackendCategoryToFrontend(
-  backendCategory: AnalysisCategory,
-): VCCategory[] {
-  // Simple mapping for Phase 02 - Phase 03 will enhance this
-  const mapping: Record<AnalysisCategory, VCCategory[]> = {
-    overall_assessment: [],
-    market_opportunity: ['marketSize'],
-    business_model: ['businessModel'],
-    team_execution: ['teamAndFounders'],
-    financial_projections: ['financials'],
-    competitive_landscape: ['competition'],
-  };
-
-  return mapping[backendCategory] || [];
-}
-
-/**
  * Extract all category scores from AnalysisResult
+ * Phase 03: Enhanced with intelligent category mapping
  */
 function mapCategoryScores(analysis: AnalysisResult): VCCategoryScoreMapDto {
   // Initialize all 7 categories with defaults
@@ -82,23 +64,52 @@ function mapCategoryScores(analysis: AnalysisResult): VCCategoryScoreMapDto {
     },
   };
 
-  // Map scores from entity
+  // Accumulator for mapped scores (handles cumulative mapping)
+  const accumulator = new Map<
+    VCCategory,
+    { score: number; weight: number; details?: string }
+  >();
+
+  // Map scores from entity using category mapper
   if (analysis.scores) {
     for (const scoreEntity of analysis.scores) {
       if (scoreEntity.analysisCategory) {
-        const frontendCategories = mapBackendCategoryToFrontend(
+        // Use intelligent category mapper from Phase 03
+        const mappedCategories = mapCategoryWithDistribution(
           scoreEntity.analysisCategory,
+          scoreEntity.score,
+          scoreEntity.weight || DEFAULT_CATEGORY_WEIGHT,
         );
 
-        for (const frontendCat of frontendCategories) {
-          categoryScores[frontendCat] = {
-            score: scoreEntity.score,
-            weight: scoreEntity.weight || DEFAULT_CATEGORY_WEIGHT,
-            details: scoreEntity.summary || scoreEntity.details,
-          };
+        // Accumulate mapped scores
+        for (const [category, value] of mappedCategories.entries()) {
+          const existing = accumulator.get(category);
+          if (existing) {
+            accumulator.set(category, {
+              score: existing.score + value.score,
+              weight: existing.weight + value.weight,
+              details:
+                scoreEntity.summary || scoreEntity.details || existing.details,
+            });
+          } else {
+            accumulator.set(category, {
+              score: value.score,
+              weight: value.weight,
+              details: scoreEntity.summary || scoreEntity.details,
+            });
+          }
         }
       }
     }
+  }
+
+  // Apply accumulated scores to categoryScores
+  for (const [category, value] of accumulator.entries()) {
+    categoryScores[category] = {
+      score: Math.min(100, value.score), // Cap at 100
+      weight: value.weight,
+      details: value.details,
+    };
   }
 
   return categoryScores as VCCategoryScoreMapDto;
