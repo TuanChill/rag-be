@@ -43,7 +43,10 @@ export class PitchDeckResponseDto {
   @ApiProperty()
   lastAccessedAt!: Date;
 
-  static fromEntity(entity: PitchDeck, files?: PitchDeckFile[]): PitchDeckResponseDto {
+  static fromEntity(
+    entity: PitchDeck,
+    files?: PitchDeckFile[],
+  ): PitchDeckResponseDto {
     if (!entity) {
       throw new Error('Entity is required');
     }

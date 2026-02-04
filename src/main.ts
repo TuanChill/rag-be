@@ -5,11 +5,6 @@ import { HttpExceptionFilter } from './core/filter/http-exception.filter';
 import { getMemoryUsage } from './utils/hardware.util';
 import { ConfigService } from '@nestjs/config';
 
-import * as dotenv from 'dotenv';
-
-// Load environment variables BEFORE importing modules
-dotenv.config({ override: true });
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   /**

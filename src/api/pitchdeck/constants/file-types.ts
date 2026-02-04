@@ -22,7 +22,9 @@ export const ALLOWED_MIMES: readonly MimeType[] = [
 export const MIME_TO_EXT: Record<MimeType, string> = {
   'application/pdf': 'pdf',
   'application/vnd.ms-powerpoint': 'ppt',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+    'pptx',
   'application/msword': 'doc',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    'docx',
 };

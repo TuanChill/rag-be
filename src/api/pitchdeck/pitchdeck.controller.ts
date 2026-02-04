@@ -95,12 +95,14 @@ export class PitchDeckController {
       // Validate MIME type against whitelist
       if (!ALLOWED_MIMES.includes(file.mimetype as any)) {
         // Cleanup all temp files on validation failure (await to avoid race condition)
-        await Promise.allSettled(
-          files.map((f) => fs.unlink(f.path)),
+        await Promise.allSettled(files.map((f) => fs.unlink(f.path)));
+        this.logger.warn(
+          `Cleaned up ${files.length} temp files after MIME validation failure`,
         );
-        this.logger.warn(`Cleaned up ${files.length} temp files after MIME validation failure`);
         throw new BadRequestException(
-          `Invalid file type: ${basename(file.originalname)}. Allowed: PDF, PPT, PPTX, DOC, DOCX`,
+          `Invalid file type: ${basename(
+            file.originalname,
+          )}. Allowed: PDF, PPT, PPTX, DOC, DOCX`,
         );
       }
 
@@ -110,10 +112,10 @@ export class PitchDeckController {
 
       if (!fileType || !ALLOWED_MIMES.includes(fileType.mime as any)) {
         // Cleanup all temp files on validation failure (await to avoid race condition)
-        await Promise.allSettled(
-          files.map((f) => fs.unlink(f.path)),
+        await Promise.allSettled(files.map((f) => fs.unlink(f.path)));
+        this.logger.warn(
+          `Cleaned up ${files.length} temp files after magic number validation failure`,
         );
-        this.logger.warn(`Cleaned up ${files.length} temp files after magic number validation failure`);
         throw new BadRequestException(
           `File content mismatch: ${basename(file.originalname)}`,
         );
@@ -127,7 +129,10 @@ export class PitchDeckController {
       ownerId,
     );
 
-    return PitchDeckResponseDto.fromEntity(pitchDeck, await pitchDeck.files.loadItems());
+    return PitchDeckResponseDto.fromEntity(
+      pitchDeck,
+      await pitchDeck.files.loadItems(),
+    );
   }
 
   @Get()

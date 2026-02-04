@@ -121,11 +121,7 @@ export class OrchestratorService {
 
       // Execute analysis agents (parallel)
       // Findings are stored in DB within the method, return value not used
-      await this.executeAnalysisAgents(
-        analysis,
-        deckId,
-        deckUuid,
-      );
+      await this.executeAnalysisAgents(analysis, deckId, deckUuid);
 
       // Calculate overall score
       const overallScore =

@@ -29,6 +29,12 @@ import { AnalysisModule as AnalysisAgentsModule } from './agents/analysis/analys
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      cache: false,
+      envFilePath: '.env',
+      load: [configuration],
+    }),
     UserModule,
     AuthModule,
     RagModule,
@@ -37,11 +43,6 @@ import { AnalysisModule as AnalysisAgentsModule } from './agents/analysis/analys
     AgentsModule,
     ScoringModule,
     AnalysisAgentsModule,
-    ConfigModule.forRoot({
-      isGlobal: true,
-      cache: false,
-      load: [configuration],
-    }),
     MikroOrmModule.forRootAsync({
       useClass: DatabaseConfig,
     }),
