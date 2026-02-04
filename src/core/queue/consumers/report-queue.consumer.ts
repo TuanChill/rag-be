@@ -5,12 +5,7 @@
  * Processes report generation jobs from the queue
  * Uses WorkerHost pattern for BullMQ
  */
-import {
-  Inject,
-  Injectable,
-  Logger,
-  forwardRef,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { ReportJobData } from '../interfaces/report-job.interface';
@@ -128,12 +123,16 @@ export class ReportQueueConsumer extends WorkerHost {
 
   @OnWorkerEvent('active')
   onActive(job: Job) {
-    this.logger.log(`Report job ${job.id} started for report: ${job.data.reportUuid}`);
+    this.logger.log(
+      `Report job ${job.id} started for report: ${job.data.reportUuid}`,
+    );
   }
 
   @OnWorkerEvent('completed')
   onCompleted(job: Job) {
-    this.logger.log(`Report job ${job.id} completed for report: ${job.data.reportUuid}`);
+    this.logger.log(
+      `Report job ${job.id} completed for report: ${job.data.reportUuid}`,
+    );
   }
 
   @OnWorkerEvent('failed')

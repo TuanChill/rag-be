@@ -75,6 +75,23 @@ export class RagService implements OnModuleDestroy {
         },
       );
 
+      // Create index on deckUuid field for filtering
+      // Required for vector similarity search with metadata filters
+      // Note: Idempotent - AstraDB ignores if index already exists
+      try {
+        // @ts-ignore - AstraDBVectorStore doesn't expose collection publicly
+        const collection = (this.vectorStore as any).collection;
+        if (collection) {
+          await collection.createIndex({ deckUuid: 1 });
+          this.logger.log('deckUuid index ready on AstraDB collection');
+        }
+      } catch (indexError) {
+        // Log but don't fail startup - index may exist or collection differs
+        this.logger.warn(
+          `deckUuid index: ${indexError instanceof Error ? indexError.message : 'Unknown'}`,
+        );
+      }
+
       this.isInitialized = true;
       this.logger.log('RAG service initialized successfully');
     } catch (error) {

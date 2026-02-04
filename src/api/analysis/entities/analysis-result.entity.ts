@@ -69,6 +69,11 @@ export class AnalysisResult extends BaseEntity {
   @Property()
   analysisType!: 'full' | 'sector' | 'stage' | 'thesis';
 
+  /** Pitch deck UUID (public identifier) - stored for direct access without populating relation */
+  @Index()
+  @Property()
+  deckUuid!: string;
+
   /** Job ID from queue for tracking */
   @Index()
   @Property({ nullable: true })

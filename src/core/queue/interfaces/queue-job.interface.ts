@@ -3,8 +3,11 @@
  * Used by BullMQ queue to pass data between producer and consumer
  */
 export interface AnalysisJobData {
-  /** Pitch deck entity ID (ObjectId) */
+  /** Pitch deck entity ID (ObjectId) - MongoDB _id */
   deckId: string;
+
+  /** Pitch deck UUID for logging/events - public identifier */
+  deckUuid: string;
 
   /** User ID who owns the deck (ObjectId) */
   ownerId: string;

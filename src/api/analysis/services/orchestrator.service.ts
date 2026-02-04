@@ -88,21 +88,32 @@ export class OrchestratorService {
     deckId: string,
     ownerId: string,
     deckUuid: string,
+    contextEm?: EntityManager,
   ): Promise<AnalysisResult> {
     this.logger.log(`Starting analysis for deck: ${deckId}`);
 
+    // Use provided context EntityManager or fall back to injected one
+    const em = contextEm ?? this.em;
+
+    // Get repositories from the context EntityManager
+    const analysisRepo = em.getRepository(AnalysisResult);
+    const scoreRepo = em.getRepository(AnalysisScore);
+    const findingRepo = em.getRepository(AnalysisFinding);
+    const agentStateRepo = em.getRepository(AgentState);
+
     // Create AnalysisResult entity
-    const analysis = this.analysisRepository.create({
+    const analysis = analysisRepo.create({
       uuid: uuidv4(),
       status: 'running' as AnalysisStatus,
       startedAt: new Date(),
+      deckUuid,
       deck: Reference.createFromPK(PitchDeck, new ObjectId(deckId)),
       owner: Reference.createFromPK(User, new ObjectId(ownerId)),
       analysisType: 'full',
     });
 
-    this.em.persist(analysis);
-    await this.em.flush();
+    em.persist(analysis);
+    await em.flush();
 
     try {
       // Emit start event
@@ -117,11 +128,21 @@ export class OrchestratorService {
         analysis,
         deckId,
         deckUuid,
+        scoreRepo,
+        agentStateRepo,
+        em,
       );
 
       // Execute analysis agents (parallel)
       // Findings are stored in DB within the method, return value not used
-      await this.executeAnalysisAgents(analysis, deckId, deckUuid);
+      await this.executeAnalysisAgents(
+        analysis,
+        deckId,
+        deckUuid,
+        findingRepo,
+        agentStateRepo,
+        em,
+      );
 
       // Calculate overall score
       const overallScore =
@@ -134,7 +155,7 @@ export class OrchestratorService {
         completedAt: new Date(),
       });
 
-      await this.em.flush();
+      await em.flush();
 
       // Emit completion event
       this.events.emitAnalysisCompleted({
@@ -156,7 +177,7 @@ export class OrchestratorService {
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
       });
 
-      await this.em.flush();
+      await em.flush();
       throw error;
     }
   }
@@ -165,6 +186,9 @@ export class OrchestratorService {
     analysis: AnalysisResult,
     deckId: string,
     deckUuid: string,
+    scoreRepo: EntityRepository<AnalysisScore>,
+    agentStateRepo: EntityRepository<AgentState>,
+    em: EntityManager,
   ): Promise<AnalysisScore[]> {
     const agents = [
       { agent: this.sectorAgent, order: 1, name: 'SectorMatchAgent' },
@@ -182,17 +206,17 @@ export class OrchestratorService {
         step: `Running ${name}`,
       });
 
-      const agentState = this.agentStateRepository.create({
+      const agentState = agentStateRepo.create({
         agentName: name,
         status: 'running' as AgentStatus,
         executionOrder: order,
         analysis,
       });
-      this.em.persist(agentState);
-      await this.em.flush();
+      em.persist(agentState);
+      await em.flush();
 
       try {
-        const input: AgentInput = { deckId };
+        const input: AgentInput = { deckId: deckUuid };
         const result = await agent.execute(input);
 
         if (result.success && result.data) {
@@ -203,15 +227,15 @@ export class OrchestratorService {
             justification: string;
           };
 
-          const score = this.scoreRepository.create({
+          const score = scoreRepo.create({
             category: scoreData.category as ScoreCategory,
             score: scoreData.score,
             weight: scoreData.weight,
             details: scoreData.justification,
             analysis,
           });
-          this.em.persist(score);
-          await this.em.flush();
+          em.persist(score);
+          await em.flush();
           results.push(score);
 
           wrap(agentState).assign({ status: 'completed' as AgentStatus });
@@ -222,14 +246,14 @@ export class OrchestratorService {
           });
         }
 
-        await this.em.flush();
+        await em.flush();
       } catch (error) {
         wrap(agentState).assign({
           status: 'failed' as AgentStatus,
           errorMessage:
             error instanceof Error ? error.message : 'Unknown error',
         });
-        await this.em.flush();
+        await em.flush();
         this.logger.error(`${name} failed`, error);
       }
     }
@@ -241,6 +265,9 @@ export class OrchestratorService {
     analysis: AnalysisResult,
     deckId: string,
     deckUuid: string,
+    findingRepo: EntityRepository<AnalysisFinding>,
+    agentStateRepo: EntityRepository<AgentState>,
+    em: EntityManager,
   ): Promise<Finding[]> {
     const agents = [
       { agent: this.strengthsAgent, order: 5, name: 'StrengthsAgent' },
@@ -257,17 +284,17 @@ export class OrchestratorService {
         step: `Running ${name}`,
       });
 
-      const agentState = this.agentStateRepository.create({
+      const agentState = agentStateRepo.create({
         agentName: name,
         status: 'running' as AgentStatus,
         executionOrder: order,
         analysis,
       });
-      this.em.persist(agentState);
-      await this.em.flush();
+      em.persist(agentState);
+      await em.flush();
 
       try {
-        const input: AgentInput = { deckId };
+        const input: AgentInput = { deckId: deckUuid };
         const result = await agent.execute(input);
 
         if (result.success && result.data) {
@@ -287,7 +314,7 @@ export class OrchestratorService {
               source: string;
             };
 
-            const findingEntity = this.findingRepository.create({
+            const findingEntity = findingRepo.create({
               type: findingData.type as FindingType,
               title: findingData.title,
               description: findingData.description,
@@ -295,8 +322,8 @@ export class OrchestratorService {
               source: findingData.source,
               analysis,
             });
-            this.em.persist(findingEntity);
-            await this.em.flush();
+            em.persist(findingEntity);
+            await em.flush();
           }
 
           wrap(agentState).assign({ status: 'completed' as AgentStatus });
@@ -307,14 +334,14 @@ export class OrchestratorService {
           });
         }
 
-        await this.em.flush();
+        await em.flush();
       } catch (error) {
         wrap(agentState).assign({
           status: 'failed' as AgentStatus,
           errorMessage:
             error instanceof Error ? error.message : 'Unknown error',
         });
-        await this.em.flush();
+        await em.flush();
         this.logger.error(`${name} failed`, error);
       }
     }
@@ -342,6 +369,7 @@ export class OrchestratorService {
       uuid: uuidv4(),
       status: 'running' as AnalysisStatus,
       startedAt: new Date(),
+      deckUuid,
       deck: Reference.createFromPK(PitchDeck, new ObjectId(deckId)),
       owner: Reference.createFromPK(User, new ObjectId(ownerId)),
       analysisType: 'full',
@@ -453,7 +481,7 @@ export class OrchestratorService {
       await this.em.flush();
 
       try {
-        const input: AgentInput = { deckId };
+        const input: AgentInput = { deckId: deckUuid };
         const result = await agent.execute(input);
 
         if (result.success && result.data) {

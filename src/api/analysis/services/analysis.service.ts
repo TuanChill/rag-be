@@ -47,16 +47,19 @@ export class AnalysisService {
     }
 
     // Check for existing analysis
-    const existing = await this.analysisRepository.findByDeckId(
-      deck._id.toString(),
-    );
-    if (existing && existing.status !== 'failed') {
-      return existing;
-    }
+    // const existing = await this.analysisRepository.findByDeckId(
+    //   deck._id.toString(),
+    // );
+    // if (existing && existing.status !== 'failed') {
+    //   return existing;
+    // }
 
-    // Queue analysis job
+    console.log('Starting analysis for deck', deckUuid);
+
+    // Queue analysis job - pass deck._id (ObjectId) as deckId, deckUuid for logging
     const jobId = await this.queueProducer.addAnalysisJob({
       deckId: deck._id.toString(),
+      deckUuid,
       ownerId,
       type: 'full',
     });
@@ -65,6 +68,7 @@ export class AnalysisService {
     const analysis = this.analysisRepository.create({
       uuid: jobId,
       status: 'pending' as any,
+      deckUuid,
       deck: Reference.createFromPK(PitchDeck, deck._id),
       owner: Reference.createFromPK(User, new ObjectId(ownerId)),
       analysisType: 'full',

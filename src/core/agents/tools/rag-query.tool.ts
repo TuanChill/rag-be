@@ -28,7 +28,7 @@ export class RagQueryTool {
           this.logger.debug(`RAG query for deck ${deckId}: ${query}`);
 
           const results = await this.ragService.queryDocuments(query, 5, {
-            deckId,
+            deckUuid: deckId,
           });
 
           return JSON.stringify({

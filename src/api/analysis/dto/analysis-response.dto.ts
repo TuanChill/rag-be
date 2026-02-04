@@ -124,7 +124,7 @@ export class AnalysisResponseDto {
       createdAt: entity.createdAt,
       completedAt: entity.completedAt,
       jobId: entity.jobId,
-      deckId: entity.deck?.uuid || '',
+      deckId: entity.deckUuid,
     };
   }
 }

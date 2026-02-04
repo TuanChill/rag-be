@@ -11,6 +11,7 @@ import { RagModule } from './api/rag/rag.module';
 import { PitchDeckModule } from './api/pitchdeck/pitchdeck.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { BullModule } from '@nestjs/bullmq';
 import configuration from './config/configuration';
 import { APP_PIPE } from '@nestjs/core';
 import { LoggerMiddleware } from './core/middlewares/logger.middleware';
@@ -25,6 +26,41 @@ import { AgentsModule } from './core/agents/agents.module';
 import { ScoringModule } from './agents/scoring/scoring.module';
 import { AnalysisModule as AnalysisAgentsModule } from './agents/analysis/analysis.module';
 import { ProcessorsModule } from './core/queue/processors.module';
+
+/**
+ * Creates Redis connection config for BullMQ
+ */
+function createRedisConnection(config: ConfigService) {
+  const redisUrl = config.get<string>('eventQueue.redisUrl', 'localhost');
+
+  if (redisUrl.includes('://')) {
+    try {
+      const url = new URL(redisUrl);
+      const connection: any = {
+        host: url.hostname,
+        port: parseInt(url.port) || 6379,
+      };
+
+      if (url.username) connection.username = url.username;
+      if (url.password) connection.password = url.password;
+
+      const dbMatch = url.pathname.match(/^\/(\d+)$/);
+      if (dbMatch) connection.db = parseInt(dbMatch[1]);
+
+      return connection;
+    } catch {
+      // Fall through to individual parameters
+    }
+  }
+
+  return {
+    host: redisUrl,
+    port: config.get<number>('eventQueue.redisPort', 6379),
+    username: config.get<string>('eventQueue.redisUser'),
+    password: config.get<string>('eventQueue.redisPassword'),
+    db: config.get<number>('eventQueue.redisDb', 0),
+  };
+}
 
 @Module({
   imports: [
@@ -76,6 +112,13 @@ import { ProcessorsModule } from './core/queue/processors.module';
     }),
     AppConfigModule,
     EventsModule,
+    // Global BullMQ connection - MUST be before ProcessorsModule
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: createRedisConnection(config),
+      }),
+    }),
     ProcessorsModule,
     // import redis module here for some case that cache module don't work
     // RedisModule.forRootAsync({
