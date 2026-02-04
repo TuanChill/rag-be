@@ -13,13 +13,16 @@ import { DeckChunk } from './entities/deck-chunk.entity';
 import { PitchDeckFile, FileStatus } from './entities/pitch-deck-file.entity';
 import { UploadDeckDto } from './dto/upload-deck.dto';
 import { User } from '../user/entities/user.entity';
-import { MIME_TO_EXT, MimeType } from './constants/file-types';
+import {
+  MIME_TO_EXT,
+  MimeType,
+  MAX_FILES_PER_DECK,
+  MAX_TOTAL_SIZE,
+  isValidMimeType,
+} from './constants/file-types';
 import { v4 as uuidv4 } from 'uuid';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-
-const MAX_FILES_PER_DECK = 10;
-const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 500MB total
 
 @Injectable()
 export class PitchDeckService extends BaseService<PitchDeck> {
@@ -76,7 +79,7 @@ export class PitchDeckService extends BaseService<PitchDeck> {
 
     // Validate each file has a valid MIME type
     for (const file of files) {
-      if (!MIME_TO_EXT[file.mimetype as MimeType]) {
+      if (!isValidMimeType(file.mimetype)) {
         throw new BadRequestException(
           `Invalid file type: ${file.mimetype}. Allowed: PDF, PPT, PPTX, DOC, DOCX`,
         );
@@ -104,10 +107,10 @@ export class PitchDeckService extends BaseService<PitchDeck> {
         `Uploading pitch deck: ${dto.title} with ${files.length} files for user: ${ownerId}`,
       );
 
-      // Process each file
+      // Process each file (MIME type validated above, safe to cast)
       for (const file of files) {
         const fileUuid = uuidv4();
-        const safeExtension = MIME_TO_EXT[file.mimetype as MimeType] || 'bin';
+        const safeExtension = MIME_TO_EXT[file.mimetype] || 'bin';
         const storageFileName = `${fileUuid}.${safeExtension}`;
         const storagePath = join(deckDir, storageFileName);
 
@@ -117,7 +120,7 @@ export class PitchDeckService extends BaseService<PitchDeck> {
         const deckFile = this.em.create(PitchDeckFile, {
           uuid: fileUuid,
           originalFileName: file.originalname,
-          mimeType: file.mimetype as MimeType,
+          mimeType: file.mimetype as MimeType, // Validated by isValidMimeType above
           fileSize: file.size,
           storagePath,
           status: 'ready' as FileStatus,

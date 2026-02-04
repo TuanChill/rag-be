@@ -14,6 +14,7 @@ import {
   HttpStatus,
   UseGuards,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import {
@@ -27,27 +28,78 @@ import { PitchDeckService } from './pitchdeck.service';
 import { UploadDeckDto } from './dto/upload-deck.dto';
 import { PitchDeckResponseDto } from './dto/pitch-deck-response.dto';
 import { diskStorage } from 'multer';
-import { join, basename } from 'path';
+import { join } from 'path';
 import { promises as fs } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { fileTypeFromBuffer } from 'file-type';
 import { JwtAuthGuard } from '../../core/guard/jwt.auth.guard';
-import { ALLOWED_MIMES, MIME_TO_EXT } from './constants/file-types';
+import {
+  ALLOWED_MIMES,
+  MIME_TO_EXT,
+  isValidMimeType,
+  MAX_FILES_PER_DECK,
+  MAX_FILE_SIZE,
+  MAX_TOTAL_SIZE,
+} from './constants/file-types';
+import { DeckStatus } from './entities/pitch-deck.entity';
 
 const TEMP_UPLOAD_DIR = join(process.cwd(), 'uploads', 'temp');
-
-// Ensure temp directory exists (async, best effort)
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-fs.mkdir(TEMP_UPLOAD_DIR, { recursive: true }).catch(() => {});
 
 @ApiTags('pitchdeck')
 @Controller('pitchdeck')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-export class PitchDeckController {
+export class PitchDeckController implements OnModuleInit {
   private readonly logger = new Logger(PitchDeckController.name);
 
   constructor(private readonly pitchDeckService: PitchDeckService) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await fs.mkdir(TEMP_UPLOAD_DIR, { recursive: true });
+      this.logger.log(`Temp upload directory ready: ${TEMP_UPLOAD_DIR}`);
+    } catch (error) {
+      this.logger.error('Failed to create temp upload directory', error);
+    }
+  }
+
+  /**
+   * Sanitize filename to prevent log injection and XSS
+   * Removes special characters, limits length
+   */
+  private sanitizeFilename(filename: string): string {
+    return filename.replace(/[^\w\s.-]/gi, '').substring(0, 50);
+  }
+
+  /**
+   * Cleanup temp files with proper error handling
+   * Awaits all operations to prevent race conditions
+   */
+  private async cleanupFiles(
+    files: Express.Multer.File[],
+  ): Promise<{ cleaned: number; failed: number }> {
+    const results = await Promise.allSettled(
+      files.map(async (f) => {
+        try {
+          await fs.unlink(f.path);
+        } catch (err) {
+          this.logger.warn(`Failed to cleanup ${f.path}`, err);
+          throw err;
+        }
+      }),
+    );
+
+    const cleaned = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
+
+    if (failed > 0) {
+      this.logger.warn(
+        `Cleanup: ${cleaned}/${files.length} files removed, ${failed} failed`,
+      );
+    }
+
+    return { cleaned, failed };
+  }
 
   @Post('upload')
   @ApiOperation({ summary: 'Upload a pitch deck with multiple files' })
@@ -60,22 +112,22 @@ export class PitchDeckController {
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseInterceptors(
-    FilesInterceptor('files', 10, {
+    FilesInterceptor('files', MAX_FILES_PER_DECK, {
       storage: diskStorage({
         destination: TEMP_UPLOAD_DIR,
         filename: (_req, file, cb) => {
           const uuid = uuidv4();
-          const ext = MIME_TO_EXT[file.mimetype as any] || 'bin';
+          const ext = MIME_TO_EXT[file.mimetype] || 'bin';
           cb(null, `${uuid}.${ext}`);
         },
       }),
-      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB per file
+      limits: { fileSize: MAX_FILE_SIZE },
     }),
   )
   async uploadDeck(
     @UploadedFiles(
       new ParseFilePipeBuilder()
-        .addMaxSizeValidator({ maxSize: 50 * 1024 * 1024 })
+        .addMaxSizeValidator({ maxSize: MAX_FILE_SIZE })
         .build({
           errorHttpStatusCode: HttpStatus.PAYLOAD_TOO_LARGE,
           exceptionFactory: () =>
@@ -90,36 +142,36 @@ export class PitchDeckController {
       throw new BadRequestException('No files provided');
     }
 
-    // Validate each file
-    for (const file of files) {
-      // Validate MIME type against whitelist
-      if (!ALLOWED_MIMES.includes(file.mimetype as any)) {
-        // Cleanup all temp files on validation failure (await to avoid race condition)
-        await Promise.allSettled(files.map((f) => fs.unlink(f.path)));
-        this.logger.warn(
-          `Cleaned up ${files.length} temp files after MIME validation failure`,
-        );
-        throw new BadRequestException(
-          `Invalid file type: ${basename(
-            file.originalname,
-          )}. Allowed: PDF, PPT, PPTX, DOC, DOCX`,
-        );
-      }
+    // Pre-validate total size before expensive magic number checks
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    if (totalSize > MAX_TOTAL_SIZE) {
+      await this.cleanupFiles(files);
+      throw new BadRequestException('Total size exceeds 500MB limit');
+    }
 
-      // Validate magic number (actual file content)
-      const fileBuffer = await fs.readFile(file.path);
-      const fileType = await fileTypeFromBuffer(fileBuffer);
+    // Validate each file's magic number (actual file content)
+    const validationResults = await Promise.all(
+      files.map(async (file) => {
+        const fileBuffer = await fs.readFile(file.path);
+        const fileType = await fileTypeFromBuffer(fileBuffer);
+        return { file, fileType };
+      }),
+    );
 
-      if (!fileType || !ALLOWED_MIMES.includes(fileType.mime as any)) {
-        // Cleanup all temp files on validation failure (await to avoid race condition)
-        await Promise.allSettled(files.map((f) => fs.unlink(f.path)));
-        this.logger.warn(
-          `Cleaned up ${files.length} temp files after magic number validation failure`,
-        );
-        throw new BadRequestException(
-          `File content mismatch: ${basename(file.originalname)}`,
-        );
-      }
+    const failedFile = validationResults.find(
+      ({ fileType }) => !fileType || !isValidMimeType(fileType.mime),
+    );
+
+    if (failedFile) {
+      await this.cleanupFiles(files);
+      this.logger.warn(
+        `Magic number validation failed for file type: ${
+          failedFile.fileType?.mime || 'unknown'
+        }`,
+      );
+      throw new BadRequestException(
+        'Invalid file type. Allowed: PDF, PPT, PPTX, DOC, DOCX',
+      );
     }
 
     const ownerId = req.user.sub;
@@ -146,14 +198,50 @@ export class PitchDeckController {
   async listDecks(
     @Request() req: { user: { sub: string } },
     @Query('status') status?: string,
-    @Query('limit') limit?: number,
-    @Query('offset') offset?: number,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ): Promise<PitchDeckResponseDto[]> {
     const ownerId = req.user.sub;
+
+    // Validate status parameter if provided
+    const validStatuses: DeckStatus[] = [
+      'uploading',
+      'processing',
+      'ready',
+      'error',
+    ];
+    let parsedStatus: DeckStatus | undefined;
+    if (status) {
+      if (!validStatuses.includes(status as DeckStatus)) {
+        throw new BadRequestException(
+          `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+        );
+      }
+      parsedStatus = status as DeckStatus;
+    }
+
+    // Parse and validate limit
+    let parsedLimit: number | undefined;
+    if (limit) {
+      parsedLimit = parseInt(limit, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+        throw new BadRequestException('Limit must be between 1 and 100');
+      }
+    }
+
+    // Parse and validate offset
+    let parsedOffset: number | undefined;
+    if (offset) {
+      parsedOffset = parseInt(offset, 10);
+      if (isNaN(parsedOffset) || parsedOffset < 0) {
+        throw new BadRequestException('Offset must be a non-negative number');
+      }
+    }
+
     const decks = await this.pitchDeckService.findByOwner(ownerId, {
-      status: status as any,
-      limit: limit ? Number(limit) : undefined,
-      offset: offset ? Number(offset) : undefined,
+      status: parsedStatus,
+      limit: parsedLimit,
+      offset: parsedOffset,
     });
 
     return decks.map((deck) =>
